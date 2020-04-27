@@ -370,8 +370,12 @@ class BaseRLModel(ABC):
                 # Full pass on the validation set
                 for _ in range(len(dataset.val_loader)):
                     expert_obs, expert_actions = dataset.get_next_batch('val')
-                    val_loss_, = self.sess.run([loss], {obs_ph: expert_obs,
-                                                        actions_ph: expert_actions})
+                    peer_expert_actions = copy.deepcopy(expert_actions)
+                    np.random.shuffle(peer_expert_actions)
+                    val_loss_, = self.sess.run([loss], {
+                        obs_ph: expert_obs,
+                        actions_ph: expert_actions,
+                        peer_actions_ph: peer_expert_actions})
                     val_loss += val_loss_
 
                 val_loss /= len(dataset.val_loader)
