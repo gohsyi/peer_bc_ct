@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import copy
 import zipfile
 import warnings
 from abc import ABC, abstractmethod
@@ -287,7 +288,7 @@ class BaseRLModel(ABC):
         pass
 
     def pretrain(self, dataset, n_epochs=10, learning_rate=1e-4,
-                 adam_epsilon=1e-8, val_interval=None):
+                 adam_epsilon=1e-8, val_interval=None, peer=0.):
         """
         Pretrain a model using behavior cloning:
         supervised learning given an expert dataset.
@@ -300,12 +301,14 @@ class BaseRLModel(ABC):
         :param adam_epsilon: (float) the epsilon value for the adam optimizer
         :param val_interval: (int) Report training and validation losses every n epochs.
             By default, every 10th of the maximum number of epochs.
+        :param peer: (float) coefficient of the peer term.
         :return: (BaseRLModel) the pretrained model
         """
         continuous_actions = isinstance(self.action_space, gym.spaces.Box)
         discrete_actions = isinstance(self.action_space, gym.spaces.Discrete)
 
-        assert discrete_actions or continuous_actions, 'Only Discrete and Box action spaces are supported'
+        assert discrete_actions or continuous_actions, \
+            'Only Discrete and Box action spaces are supported'
 
         # Validate the model every 10% of the total number of iteration
         if val_interval is None:
@@ -328,26 +331,35 @@ class BaseRLModel(ABC):
                     one_hot_actions = tf.one_hot(actions_ph, self.action_space.n)
                     loss = tf.nn.softmax_cross_entropy_with_logits_v2(
                         logits=actions_logits_ph,
-                        labels=tf.stop_gradient(one_hot_actions)
-                    )
+                        labels=tf.stop_gradient(one_hot_actions))
                     loss = tf.reduce_mean(loss)
+                    # calculate peer term
+                    peer_actions_ph = tf.placeholder(actions_ph.dtype, actions_ph.shape, "peer_action_ph")
+                    peer_onehot_actions = tf.one_hot(peer_actions_ph, self.action_space.n)
+                    peer_term = tf.nn.softmax_cross_entropy_with_logits_v2(
+                        logits=actions_logits_ph,
+                        labels=tf.stop_gradient(peer_onehot_actions))
+                    peer_term = tf.reduce_mean(peer_term)
+                    loss -= peer * peer_term
                 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=adam_epsilon)
                 optim_op = optimizer.minimize(loss, var_list=self.params)
 
             self.sess.run(tf.global_variables_initializer())
 
         if self.verbose > 0:
-            print("Pretraining with Behavior Cloning...")
+            print(f"Pretraining with{' Peer ' if peer else ' '}Behavior Cloning...")
 
         for epoch_idx in range(int(n_epochs)):
             train_loss = 0.0
             # Full pass on the training set
             for _ in range(len(dataset.train_loader)):
                 expert_obs, expert_actions = dataset.get_next_batch('train')
+                peer_expert_actions = copy.deepcopy(expert_actions)
+                np.random.shuffle(peer_expert_actions)
                 feed_dict = {
                     obs_ph: expert_obs,
                     actions_ph: expert_actions,
-                }
+                    peer_actions_ph: peer_expert_actions}
                 train_loss_, _ = self.sess.run([loss, optim_op], feed_dict)
                 train_loss += train_loss_
 
@@ -463,10 +475,11 @@ class BaseRLModel(ABC):
             # Assume `load_path_or_dict` is dict of variable.name -> ndarrays we want to load
             params = load_path_or_dict
         elif isinstance(load_path_or_dict, list):
-            warnings.warn("Loading model parameters from a list. This has been replaced " +
-                          "with parameter dictionaries with variable names and parameters. " +
-                          "If you are loading from a file, consider re-saving the file.",
-                          DeprecationWarning)
+            warnings.warn(
+                "Loading model parameters from a list. This has been replaced " +
+                "with parameter dictionaries with variable names and parameters. " +
+                "If you are loading from a file, consider re-saving the file.",
+                DeprecationWarning)
             # Assume `load_path_or_dict` is list of ndarrays.
             # Create param dictionary assuming the parameters are in same order
             # as `get_parameter_list` returns them.
@@ -495,8 +508,9 @@ class BaseRLModel(ABC):
 
         # Check that we updated all parameters if exact_match=True
         if exact_match and len(not_updated_variables) > 0:
-            raise RuntimeError("Load dictionary did not contain all variables. " +
-                               "Missing variables: {}".format(", ".join(not_updated_variables)))
+            raise RuntimeError(
+                "Load dictionary did not contain all variables. " +
+                "Missing variables: {}".format(", ".join(not_updated_variables)))
 
         self.sess.run(param_update_ops, feed_dict=feed_dict)
 
@@ -676,10 +690,11 @@ class BaseRLModel(ABC):
         except zipfile.BadZipFile:
             # load_path wasn't a zip file. Possibly a cloudpickle
             # file. Show a warning and fall back to loading cloudpickle.
-            warnings.warn("It appears you are loading from a file with old format. " +
-                          "Older cloudpickle format has been replaced with zip-archived " +
-                          "models. Consider saving the model with new format.",
-                          DeprecationWarning)
+            warnings.warn(
+                "It appears you are loading from a file with old format. " +
+                "Older cloudpickle format has been replaced with zip-archived " +
+                "models. Consider saving the model with new format.",
+                DeprecationWarning)
             # Attempt loading with the cloudpickle format.
             # If load_path is file-like, seek back to beginning of file
             if not isinstance(load_path, str):
@@ -715,39 +730,43 @@ class BaseRLModel(ABC):
             elif observation.shape[1:] == observation_space.shape:
                 return True
             else:
-                raise ValueError("Error: Unexpected observation shape {} for ".format(observation.shape) +
-                                 "Box environment, please use {} ".format(observation_space.shape) +
-                                 "or (n_env, {}) for the observation shape."
-                                 .format(", ".join(map(str, observation_space.shape))))
+                raise ValueError(
+                    "Error: Unexpected observation shape {} for ".format(observation.shape) +
+                    "Box environment, please use {} ".format(observation_space.shape) +
+                    "or (n_env, {}) for the observation shape.".format(", ".join(map(str, observation_space.shape))))
         elif isinstance(observation_space, gym.spaces.Discrete):
             if observation.shape == ():  # A numpy array of a number, has shape empty tuple '()'
                 return False
             elif len(observation.shape) == 1:
                 return True
             else:
-                raise ValueError("Error: Unexpected observation shape {} for ".format(observation.shape) +
-                                 "Discrete environment, please use (1,) or (n_env, 1) for the observation shape.")
+                raise ValueError(
+                    "Error: Unexpected observation shape {} for ".format(observation.shape) +
+                    "Discrete environment, please use (1,) or (n_env, 1) for the observation shape.")
         elif isinstance(observation_space, gym.spaces.MultiDiscrete):
             if observation.shape == (len(observation_space.nvec),):
                 return False
             elif len(observation.shape) == 2 and observation.shape[1] == len(observation_space.nvec):
                 return True
             else:
-                raise ValueError("Error: Unexpected observation shape {} for MultiDiscrete ".format(observation.shape) +
-                                 "environment, please use ({},) or ".format(len(observation_space.nvec)) +
-                                 "(n_env, {}) for the observation shape.".format(len(observation_space.nvec)))
+                raise ValueError(
+                    "Error: Unexpected observation shape {} for MultiDiscrete ".format(observation.shape) +
+                    "environment, please use ({},) or ".format(len(observation_space.nvec)) +
+                    "(n_env, {}) for the observation shape.".format(len(observation_space.nvec)))
         elif isinstance(observation_space, gym.spaces.MultiBinary):
             if observation.shape == (observation_space.n,):
                 return False
             elif len(observation.shape) == 2 and observation.shape[1] == observation_space.n:
                 return True
             else:
-                raise ValueError("Error: Unexpected observation shape {} for MultiBinary ".format(observation.shape) +
-                                 "environment, please use ({},) or ".format(observation_space.n) +
-                                 "(n_env, {}) for the observation shape.".format(observation_space.n))
+                raise ValueError(
+                    "Error: Unexpected observation shape {} for MultiBinary ".format(observation.shape) +
+                    "environment, please use ({},) or ".format(observation_space.n) +
+                    "(n_env, {}) for the observation shape.".format(observation_space.n))
         else:
-            raise ValueError("Error: Cannot determine if the observation is vectorized with the space type {}."
-                             .format(observation_space))
+            raise ValueError(
+                "Error: Cannot determine if the observation is vectorized with the space type {}.".format(
+                    observation_space))
 
 
 class ActorCriticRLModel(BaseRLModel):
@@ -770,9 +789,10 @@ class ActorCriticRLModel(BaseRLModel):
 
     def __init__(self, policy, env, _init_setup_model, verbose=0, policy_base=ActorCriticPolicy,
                  requires_vec_env=False, policy_kwargs=None, seed=None, n_cpu_tf_sess=None):
-        super(ActorCriticRLModel, self).__init__(policy, env, verbose=verbose, requires_vec_env=requires_vec_env,
-                                                 policy_base=policy_base, policy_kwargs=policy_kwargs,
-                                                 seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
+        super(ActorCriticRLModel, self).__init__(
+            policy, env, verbose=verbose, requires_vec_env=requires_vec_env,
+            policy_base=policy_base, policy_kwargs=policy_kwargs,
+            seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         self.sess = None
         self.initial_state = None
@@ -842,8 +862,9 @@ class ActorCriticRLModel(BaseRLModel):
         actions_proba = self.proba_step(observation, state, mask)
 
         if len(actions_proba) == 0:  # empty list means not implemented
-            warnings.warn("Warning: action probability is not implemented for {} action space. Returning None."
-                          .format(type(self.action_space).__name__))
+            warnings.warn(
+                "Warning: action probability is not implemented for {} action space. Returning None.".format(
+                    type(self.action_space).__name__))
             return None
 
         if actions is not None:  # comparing the action distribution, to given actions
@@ -936,9 +957,9 @@ class ActorCriticRLModel(BaseRLModel):
         data, params = cls._load_from_file(load_path, custom_objects=custom_objects)
 
         if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != data['policy_kwargs']:
-            raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
-                             "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'],
-                                                                              kwargs['policy_kwargs']))
+            raise ValueError(
+                "The specified policy kwargs do not equal the stored policy kwargs. "
+                "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'], kwargs['policy_kwargs']))
 
         model = cls(policy=data["policy"], env=None, _init_setup_model=False)
         model.__dict__.update(data)
@@ -973,9 +994,10 @@ class OffPolicyRLModel(BaseRLModel):
     def __init__(self, policy, env, replay_buffer=None, _init_setup_model=False, verbose=0, *,
                  requires_vec_env=False, policy_base=None,
                  policy_kwargs=None, seed=None, n_cpu_tf_sess=None):
-        super(OffPolicyRLModel, self).__init__(policy, env, verbose=verbose, requires_vec_env=requires_vec_env,
-                                               policy_base=policy_base, policy_kwargs=policy_kwargs,
-                                               seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
+        super(OffPolicyRLModel, self).__init__(
+            policy, env, verbose=verbose, requires_vec_env=requires_vec_env,
+            policy_base=policy_base, policy_kwargs=policy_kwargs,
+            seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         self.replay_buffer = replay_buffer
 
@@ -1019,9 +1041,9 @@ class OffPolicyRLModel(BaseRLModel):
         data, params = cls._load_from_file(load_path, custom_objects=custom_objects)
 
         if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != data['policy_kwargs']:
-            raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
-                             "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'],
-                                                                              kwargs['policy_kwargs']))
+            raise ValueError(
+                "The specified policy kwargs do not equal the stored policy kwargs. "
+                "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'], kwargs['policy_kwargs']))
 
         model = cls(policy=data["policy"], env=None, _init_setup_model=False)
         model.__dict__.update(data)
@@ -1041,7 +1063,8 @@ class _UnvecWrapper(VecEnvWrapper):
         :param venv: (VecEnv) the vectorized environment to wrap
         """
         super().__init__(venv)
-        assert venv.num_envs == 1, "Error: cannot unwrap a environment wrapper that has more than one environment."
+        assert venv.num_envs == 1, \
+            "Error: cannot unwrap a environment wrapper that has more than one environment."
 
     def seed(self, seed=None):
         return self.venv.env_method('seed', seed)

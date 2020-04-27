@@ -88,20 +88,20 @@ class ExpertDataset(object):
         self.std_ret = np.std(np.array(self.returns))
         self.verbose = verbose
 
-        assert len(self.observations) == len(self.actions), "The number of actions and observations differ " \
-                                                            "please check your expert dataset"
+        assert len(self.observations) == len(self.actions), \
+            "The number of actions and observations differ please check your expert dataset"
         self.num_traj = min(traj_limitation, np.sum(episode_starts))
         self.num_transition = len(self.observations)
         self.randomize = randomize
         self.sequential_preprocessing = sequential_preprocessing
 
         self.dataloader = None
-        self.train_loader = DataLoader(train_indices, self.observations, self.actions, batch_size,
-                                       shuffle=self.randomize, start_process=False,
-                                       sequential=sequential_preprocessing)
-        self.val_loader = DataLoader(val_indices, self.observations, self.actions, batch_size,
-                                     shuffle=self.randomize, start_process=False,
-                                     sequential=sequential_preprocessing)
+        self.train_loader = DataLoader(
+            train_indices, self.observations, self.actions, batch_size, shuffle=self.randomize, start_process=False,
+            sequential=sequential_preprocessing)
+        self.val_loader = DataLoader(
+            val_indices, self.observations, self.actions, batch_size, shuffle=self.randomize, start_process=False,
+            sequential=sequential_preprocessing)
 
         if self.verbose >= 1:
             self.log_info()
@@ -113,9 +113,9 @@ class ExpertDataset(object):
         :param batch_size: (int)
         """
         indices = np.random.permutation(len(self.observations)).astype(np.int64)
-        self.dataloader = DataLoader(indices, self.observations, self.actions, batch_size,
-                                     shuffle=self.randomize, start_process=False,
-                                     sequential=self.sequential_preprocessing)
+        self.dataloader = DataLoader(
+            indices, self.observations, self.actions, batch_size, shuffle=self.randomize, start_process=False,
+            sequential=self.sequential_preprocessing)
 
     def __del__(self):
         del self.dataloader, self.train_loader, self.val_loader
