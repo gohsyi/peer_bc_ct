@@ -8,8 +8,12 @@ from gym.spaces import Discrete
 
 from stable_baselines.common.tf_util import batch_to_seq, seq_to_batch
 from stable_baselines.common.tf_layers import conv, linear, conv_to_fc, lstm
-from stable_baselines.common.distributions import make_proba_dist_type, CategoricalProbabilityDistribution, \
-    MultiCategoricalProbabilityDistribution, DiagGaussianProbabilityDistribution, BernoulliProbabilityDistribution
+from stable_baselines.common.distributions import (
+    make_proba_dist_type,
+    CategoricalProbabilityDistribution,
+    MultiCategoricalProbabilityDistribution,
+    DiagGaussianProbabilityDistribution,
+    BernoulliProbabilityDistribution)
 from stable_baselines.common.input import observation_input
 
 
@@ -18,13 +22,35 @@ def nature_cnn(scaled_images, **kwargs):
     CNN from Nature paper.
 
     :param scaled_images: (TensorFlow Tensor) Image input placeholder
-    :param kwargs: (dict) Extra keywords parameters for the convolutional layers of the CNN
+    :param kwargs: (dict) Extra keywords parameters for the convolutional
+        layers of the CNN
     :return: (TensorFlow Tensor) The CNN output layer
     """
     activ = tf.nn.relu
-    layer_1 = activ(conv(scaled_images, 'c1', n_filters=32, filter_size=8, stride=4, init_scale=np.sqrt(2), **kwargs))
-    layer_2 = activ(conv(layer_1, 'c2', n_filters=64, filter_size=4, stride=2, init_scale=np.sqrt(2), **kwargs))
-    layer_3 = activ(conv(layer_2, 'c3', n_filters=64, filter_size=3, stride=1, init_scale=np.sqrt(2), **kwargs))
+
+    if 'view' in kwargs.keys():
+        _, h, w, d = scaled_images.shape
+        view_type = kwargs['view']
+        if view_type == 'even':
+            mask = np.array(
+                [i % 2 for i in range(h*w*d)]).reshape((1, h, w, d))
+        elif view_type == 'odd':
+            mask = np.array(
+                [1 - i % 2 for i in range(h*w*d)]).reshape((1, h, w, d))
+        else:
+            raise NotImplementedError
+        scaled_images = scaled_images * tf.constant(mask, dtype=tf.float32)
+        del kwargs['view']
+
+    layer_1 = activ(conv(
+        scaled_images, 'c1', n_filters=32, filter_size=8, stride=4,
+        init_scale=np.sqrt(2), **kwargs))
+    layer_2 = activ(conv(
+        layer_1, 'c2', n_filters=64, filter_size=4, stride=2,
+        init_scale=np.sqrt(2), **kwargs))
+    layer_3 = activ(conv(
+        layer_2, 'c3', n_filters=64, filter_size=3, stride=1,
+        init_scale=np.sqrt(2), **kwargs))
     layer_3 = conv_to_fc(layer_3)
     return activ(linear(layer_3, 'fc1', n_hidden=512, init_scale=np.sqrt(2)))
 
@@ -101,7 +127,8 @@ class BasePolicy(ABC):
     :param n_batch: (int) The number of batches to run (n_envs * n_steps)
     :param reuse: (bool) If the policy is reusable or not
     :param scale: (bool) whether or not to scale the input
-    :param obs_phs: (TensorFlow Tensor, TensorFlow Tensor) a tuple containing an override for observation placeholder
+    :param obs_phs: (TensorFlow Tensor, TensorFlow Tensor) a tuple containing
+        an override for observation placeholder
         and the processed observation placeholder respectively
     :param add_action_ph: (bool) whether or not to create an action placeholder
     """
@@ -230,19 +257,19 @@ class ActorCriticPolicy(BasePolicy):
     def _setup_init(self):
         """Sets up the distributions, actions, and value."""
         with tf.variable_scope("output", reuse=True):
-            assert self.policy is not None and self.proba_distribution is not None and self.value_fn is not None
-            self._action = self.proba_distribution.sample()
-            self._deterministic_action = self.proba_distribution.mode()
-            self._neglogp = self.proba_distribution.neglogp(self.action)
-            if isinstance(self.proba_distribution, CategoricalProbabilityDistribution):
+            assert self.policy is not None and self.prob_dist is not None and self.value_fn is not None
+            self._action = self.prob_dist.sample()
+            self._deterministic_action = self.prob_dist.mode()
+            self._neglogp = self.prob_dist.neglogp(self.action)
+            if isinstance(self.prob_dist, CategoricalProbabilityDistribution):
                 self._policy_proba = tf.nn.softmax(self.policy)
-            elif isinstance(self.proba_distribution, DiagGaussianProbabilityDistribution):
-                self._policy_proba = [self.proba_distribution.mean, self.proba_distribution.std]
-            elif isinstance(self.proba_distribution, BernoulliProbabilityDistribution):
+            elif isinstance(self.prob_dist, DiagGaussianProbabilityDistribution):
+                self._policy_proba = [self.prob_dist.mean, self.prob_dist.std]
+            elif isinstance(self.prob_dist, BernoulliProbabilityDistribution):
                 self._policy_proba = tf.nn.sigmoid(self.policy)
-            elif isinstance(self.proba_distribution, MultiCategoricalProbabilityDistribution):
+            elif isinstance(self.prob_dist, MultiCategoricalProbabilityDistribution):
                 self._policy_proba = [tf.nn.softmax(categorical.flatparam())
-                                     for categorical in self.proba_distribution.categoricals]
+                                      for categorical in self.prob_dist.categoricals]
             else:
                 self._policy_proba = []  # it will return nothing, as it is not implemented
             self._value_flat = self.value_fn[:, 0]
@@ -258,7 +285,7 @@ class ActorCriticPolicy(BasePolicy):
         return self._policy
 
     @property
-    def proba_distribution(self):
+    def prob_dist(self):
         """ProbabilityDistribution: distribution of stochastic actions."""
         return self._proba_distribution
 
@@ -501,17 +528,21 @@ class LstmPolicy(RecurrentActorCriticPolicy):
 
     def step(self, obs, state=None, mask=None, deterministic=False):
         if deterministic:
-            return self.sess.run([self.deterministic_action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
+            return self.sess.run(
+                [self.deterministic_action, self.value_flat, self.snew, self.neglogp],
+                {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
         else:
-            return self.sess.run([self.action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
+            return self.sess.run(
+                [self.action, self.value_flat, self.snew, self.neglogp],
+                {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
 
     def proba_step(self, obs, state=None, mask=None):
-        return self.sess.run(self.policy_proba, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
+        return self.sess.run(self.policy_proba, {
+            self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
 
     def value(self, obs, state=None, mask=None):
-        return self.sess.run(self.value_flat, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
+        return self.sess.run(self.value_flat, {
+            self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
 
 
 class FeedForwardPolicy(ActorCriticPolicy):
@@ -525,29 +556,36 @@ class FeedForwardPolicy(ActorCriticPolicy):
     :param n_steps: (int) The number of steps to run for each environment
     :param n_batch: (int) The number of batch to run (n_envs * n_steps)
     :param reuse: (bool) If the policy is reusable or not
-    :param layers: ([int]) (deprecated, use net_arch instead) The size of the Neural network for the policy
+    :param layers: ([int]) (deprecated, use net_arch instead) The size of the Neural
+        network for the policy
         (if None, default to [64, 64])
-    :param net_arch: (list) Specification of the actor-critic policy network architecture (see mlp_extractor
-        documentation for details).
+    :param net_arch: (list) Specification of the actor-critic policy network
+        architecture (see mlp_extractor documentation for details).
     :param act_fun: (tf.func) the activation function to use in the neural network.
-    :param cnn_extractor: (function (TensorFlow Tensor, ``**kwargs``): (TensorFlow Tensor)) the CNN feature extraction
+    :param cnn_extractor: (function (TensorFlow Tensor, ``**kwargs``):
+        (TensorFlow Tensor)) the CNN feature extraction
     :param feature_extraction: (str) The feature extraction type ("cnn" or "mlp")
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
     """
 
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False, layers=None, net_arch=None,
-                 act_fun=tf.tanh, cnn_extractor=nature_cnn, feature_extraction="cnn", **kwargs):
-        super(FeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=reuse,
-                                                scale=(feature_extraction == "cnn"))
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                 reuse=False, layers=None, net_arch=None, act_fun=tf.tanh,
+                 cnn_extractor=nature_cnn, feature_extraction="cnn", **kwargs):
+
+        super(FeedForwardPolicy, self).__init__(
+            sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=reuse,
+            scale=(feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
 
         if layers is not None:
-            warnings.warn("Usage of the `layers` parameter is deprecated! Use net_arch instead "
-                          "(it has a different semantics though).", DeprecationWarning)
+            warnings.warn(
+                "Usage of the `layers` parameter is deprecated! Use net_arch instead "
+                "(it has a different semantics though).", DeprecationWarning)
             if net_arch is not None:
-                warnings.warn("The new `net_arch` parameter overrides the deprecated `layers` parameter!",
-                              DeprecationWarning)
+                warnings.warn(
+                    "The new `net_arch` parameter overrides the deprecated `layers` "
+                    "parameter!", DeprecationWarning)
 
         if net_arch is None:
             if layers is None:
@@ -556,9 +594,11 @@ class FeedForwardPolicy(ActorCriticPolicy):
 
         with tf.variable_scope("model", reuse=reuse):
             if feature_extraction == "cnn":
-                pi_latent = vf_latent = cnn_extractor(self.processed_obs, **kwargs)
+                pi_latent = vf_latent = cnn_extractor(
+                    self.processed_obs, **kwargs)
             else:
-                pi_latent, vf_latent = mlp_extractor(tf.layers.flatten(self.processed_obs), net_arch, act_fun)
+                pi_latent, vf_latent = mlp_extractor(
+                    tf.layers.flatten(self.processed_obs), net_arch, act_fun)
 
             self._value_fn = linear(vf_latent, 'vf', 1)
 
@@ -594,12 +634,15 @@ class CnnPolicy(FeedForwardPolicy):
     :param n_steps: (int) The number of steps to run for each environment
     :param n_batch: (int) The number of batch to run (n_envs * n_steps)
     :param reuse: (bool) If the policy is reusable or not
-    :param _kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
+    :param _kwargs: (dict) Extra keyword arguments for the nature
+        CNN feature extraction
     """
 
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False, **_kwargs):
-        super(CnnPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
-                                        feature_extraction="cnn", **_kwargs)
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                 reuse=False, **_kwargs):
+        super(CnnPolicy, self).__init__(
+            sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
+            feature_extraction="cnn", **_kwargs)
 
 
 class CnnLstmPolicy(LstmPolicy):
@@ -676,14 +719,17 @@ class MlpLstmPolicy(LstmPolicy):
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
     """
 
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm=256, reuse=False, **_kwargs):
-        super(MlpLstmPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm, reuse,
-                                            layer_norm=False, feature_extraction="mlp", **_kwargs)
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                 n_lstm=256, reuse=False, **_kwargs):
+        super(MlpLstmPolicy, self).__init__(
+            sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm, reuse,
+            layer_norm=False, feature_extraction="mlp", **_kwargs)
 
 
 class MlpLnLstmPolicy(LstmPolicy):
     """
-    Policy object that implements actor critic, using a layer normalized LSTMs with a MLP feature extraction
+    Policy object that implements actor critic, using a layer normalized
+    LSTMs with a MLP feature extraction
 
     :param sess: (TensorFlow session) The current TensorFlow session
     :param ob_space: (Gym Space) The observation space of the environment
@@ -696,9 +742,11 @@ class MlpLnLstmPolicy(LstmPolicy):
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
     """
 
-    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm=256, reuse=False, **_kwargs):
-        super(MlpLnLstmPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm, reuse,
-                                              layer_norm=True, feature_extraction="mlp", **_kwargs)
+    def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch,
+                 n_lstm=256, reuse=False, **_kwargs):
+        super(MlpLnLstmPolicy, self).__init__(
+            sess, ob_space, ac_space, n_env, n_steps, n_batch, n_lstm,
+            reuse, layer_norm=True, feature_extraction="mlp", **_kwargs)
 
 
 _policy_registry = {
@@ -722,10 +770,14 @@ def get_policy_from_name(base_policy_type, name):
     :return: (base_policy_type) the policy
     """
     if base_policy_type not in _policy_registry:
-        raise ValueError("Error: the policy type {} is not registered!".format(base_policy_type))
+        raise ValueError(
+            "Error: the policy type {} is not registered!".format(
+                base_policy_type))
     if name not in _policy_registry[base_policy_type]:
-        raise ValueError("Error: unknown policy type {}, the only registed policy type are: {}!"
-                         .format(name, list(_policy_registry[base_policy_type].keys())))
+        raise ValueError(
+            "Error: unknown policy type {}, "
+            "the only registed policy type are: {}!".format(
+                name, list(_policy_registry[base_policy_type].keys())))
     return _policy_registry[base_policy_type][name]
 
 

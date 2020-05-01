@@ -1,94 +1,76 @@
-import gym
-import numpy as np
+from stable_baselines import PPO2, logger
+from stable_baselines.common.cmd_util import make_atari_env, atari_arg_parser
+from stable_baselines.common.policies import CnnPolicy, CnnLstmPolicy, \
+    CnnLnLstmPolicy, MlpPolicy
+from stable_baselines.common.vec_env import VecFrameStack
 
-from stable_baselines.common.runners import AbstractEnvRunner
-from stable_baselines.ppo2.ppo2 import swap_and_flatten
+
+def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
+          n_steps=128):
+    """
+    Train PPO2 model for atari environment, for testing purposes
+
+    :param env_id: (str) the environment id string
+    :param num_timesteps: (int) the number of timesteps to run
+    :param seed: (int) Used to seed the random generator.
+    :param policy: (Object) The policy model to use (MLP, CNN, LSTM, ...)
+    :param n_envs: (int) Number of parallel environments
+    :param nminibatches: (int) Number of training minibatches per update.
+        For recurrent policies, the number of environments run in parallel
+        should be a multiple of nminibatches.
+    :param n_steps: (int) The number of steps to run for each environment per update
+        (i.e. batch size is n_steps * n_env where n_env
+        is number of environment copies running in parallel)
+    """
+
+    env = VecFrameStack(make_atari_env(env_id, n_envs, seed), 4)
+    policy = {
+        'cnn': CnnPolicy,
+        'lstm': CnnLstmPolicy,
+        'lnlstm': CnnLnLstmPolicy,
+        'mlp': MlpPolicy}[policy]
+    models = {
+        "A": PPO2(
+            policy=policy, policy_kwargs={'view': 'even'}, n_steps=n_steps,
+            env=VecFrameStack(make_atari_env(env_id, n_envs, seed), 4),
+            nminibatches=nminibatches, lam=0.95, gamma=0.99, noptepochs=4,
+            ent_coef=.01, learning_rate=2.5e-4,
+            cliprange=lambda f: f * 0.1, verbose=1),
+        "B": PPO2(
+            policy=policy, policy_kwargs={'view': 'odd'}, n_steps=n_steps,
+            env=VecFrameStack(make_atari_env(env_id, n_envs, seed), 4),
+            nminibatches=nminibatches, lam=0.95, gamma=0.99, noptepochs=4,
+            ent_coef=.01, learning_rate=2.5e-4,
+            cliprange=lambda f: f * 0.1, verbose=1)}
+
+    n_batch = n_envs * n_steps
+    n_updates = num_timesteps // n_batch
+    for t in range(n_updates):
+        for view in "A", "B":
+            models[view].learn(n_batch)
+
+    for view in "A", "B":
+        models[view].env.close()
+        del models[view]  # free memory
 
 
-class CopierRunner(AbstractEnvRunner):
-    def __init__(self, *, env, model1, model2, n_steps, gamma, lam):
-        """
-        A runner to learn the policy of an environment for a model
+def main():
+    """
+    Runs the test
+    """
+    parser = atari_arg_parser()
+    parser.add_argument('--policy', choices=['cnn', 'lstm', 'lnlstm', 'mlp'],
+                        default='cnn', help='Policy architecture')
+    parser.add_argument('--log', type=str, default='test',
+                        help='Log ID')
+    args = parser.parse_args()
+    logger.configure(args.log)
+    train(
+        args.env,
+        num_timesteps=args.num_timesteps,
+        seed=args.seed,
+        policy=args.policy)
 
-        :param env: (Gym environment) The environment to learn from
-        :param model: (Model) The model to learn
-        :param n_steps: (int) The number of steps to run for each environment
-        :param gamma: (float) Discount factor
-        :param lam: (float) Factor for trade-off of bias vs variance for Generalized Advantage Estimator
-        """
-        super().__init__(env=env, model=model, n_steps=n_steps)
-        self.lam = lam
-        self.gamma = gamma
 
-    def _run(self):
-        """
-        Run a learning step of the model
-
-        :return:
-            - observations: (np.ndarray) the observations
-            - rewards: (np.ndarray) the rewards
-            - masks: (numpy bool) whether an episode is over or not
-            - actions: (np.ndarray) the actions
-            - values: (np.ndarray) the value function output
-            - negative log probabilities: (np.ndarray)
-            - states: (np.ndarray) the internal states of the recurrent policies
-            - infos: (dict) the extra information of the model
-        """
-        # mb stands for minibatch
-        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
-        mb_states = self.states
-        ep_infos = []
-        for _ in range(self.n_steps):
-            actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
-            mb_obs.append(self.obs.copy())
-            mb_actions.append(actions)
-            mb_values.append(values)
-            mb_neglogpacs.append(neglogpacs)
-            mb_dones.append(self.dones)
-            clipped_actions = actions
-            # Clip the actions to avoid out of bound error
-            if isinstance(self.env.action_space, gym.spaces.Box):
-                clipped_actions = np.clip(actions, self.env.action_space.low, self.env.action_space.high)
-            self.obs[:], rewards, self.dones, infos = self.env.step(clipped_actions)
-
-            self.model.num_timesteps += self.n_envs
-
-            if self.callback is not None:
-                # Abort training early
-                if self.callback.on_step() is False:
-                    self.continue_training = False
-                    # Return dummy values
-                    return [None] * 9
-
-            for info in infos:
-                maybe_ep_info = info.get('episode')
-                if maybe_ep_info is not None:
-                    ep_infos.append(maybe_ep_info)
-            mb_rewards.append(rewards)
-        # batch of steps to batch of rollouts
-        mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
-        mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
-        mb_actions = np.asarray(mb_actions)
-        mb_values = np.asarray(mb_values, dtype=np.float32)
-        mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
-        mb_dones = np.asarray(mb_dones, dtype=np.bool)
-        last_values = self.model.value(self.obs, self.states, self.dones)
-        # discount/bootstrap off value fn
-        mb_advs = np.zeros_like(mb_rewards)
-        true_reward = np.copy(mb_rewards)
-        last_gae_lam = 0
-        for step in reversed(range(self.n_steps)):
-            if step == self.n_steps - 1:
-                nextnonterminal = 1.0 - self.dones
-                nextvalues = last_values
-            else:
-                nextnonterminal = 1.0 - mb_dones[step + 1]
-                nextvalues = mb_values[step + 1]
-            delta = mb_rewards[step] + self.gamma * nextvalues * nextnonterminal - mb_values[step]
-            mb_advs[step] = last_gae_lam = delta + self.gamma * self.lam * nextnonterminal * last_gae_lam
-        mb_returns = mb_advs + mb_values
-
-        mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, true_reward = \
-            map(swap_and_flatten, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, true_reward))
-
-        return mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, ep_infos, true_reward
+if __name__ == '__main__':
+    main()

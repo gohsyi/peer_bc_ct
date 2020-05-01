@@ -326,18 +326,18 @@ class ACER(ActorCriticRLModel):
 
                     rho, rho_i_ = None, None
                     if continuous:
-                        action_ = strip(train_model.proba_distribution.sample(), self.n_envs, self.n_steps)
+                        action_ = strip(train_model.prob_dist.sample(), self.n_envs, self.n_steps)
                         distribution_f = tf.contrib.distributions.MultivariateNormalDiag(
-                            loc=strip(train_model.proba_distribution.mean, self.n_envs, self.n_steps),
-                            scale_diag=strip(train_model.proba_distribution.logstd, self.n_envs, self.n_steps))
+                            loc=strip(train_model.prob_dist.mean, self.n_envs, self.n_steps),
+                            scale_diag=strip(train_model.prob_dist.logstd, self.n_envs, self.n_steps))
                         f_polyak = tf.contrib.distributions.MultivariateNormalDiag(
-                            loc=strip(polyak_model.proba_distribution.mean, self.n_envs, self.n_steps),
-                            scale_diag=strip(polyak_model.proba_distribution.logstd, self.n_envs, self.n_steps))
+                            loc=strip(polyak_model.prob_dist.mean, self.n_envs, self.n_steps),
+                            scale_diag=strip(polyak_model.prob_dist.logstd, self.n_envs, self.n_steps))
 
                         f_i = distribution_f.prob(self.action_ph)
                         f_i_ = distribution_f.prob(action_)
                         f_polyak_i = f_polyak.prob(self.action_ph)
-                        phi_i = strip(train_model.proba_distribution.mean, self.n_envs, self.n_steps)
+                        phi_i = strip(train_model.prob_dist.mean, self.n_envs, self.n_steps)
 
                         q_value = strip(train_model.value_fn, self.n_envs, self.n_steps)
                         q_i = q_value[:, 0]
@@ -374,7 +374,7 @@ class ACER(ActorCriticRLModel):
 
                     # Calculate losses
                     # Entropy
-                    entropy = tf.reduce_sum(train_model.proba_distribution.entropy())
+                    entropy = tf.reduce_sum(train_model.prob_dist.entropy())
 
                     # Policy Gradient loss, with truncated importance sampling & bias correction
                     value = strip(value, self.n_envs, self.n_steps, True)

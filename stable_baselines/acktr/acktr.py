@@ -163,11 +163,11 @@ class ACKTR(ActorCriticRLModel):
                     self.learning_rate_ph = learning_rate_ph = tf.placeholder(tf.float32, [])
                     self.actions_ph = train_model.pdtype.sample_placeholder([None])
 
-                    neg_log_prob = train_model.proba_distribution.neglogp(self.actions_ph)
+                    neg_log_prob = train_model.prob_dist.neglogp(self.actions_ph)
 
                     # training loss
                     pg_loss = tf.reduce_mean(advs_ph * neg_log_prob)
-                    self.entropy = entropy = tf.reduce_mean(train_model.proba_distribution.entropy())
+                    self.entropy = entropy = tf.reduce_mean(train_model.prob_dist.entropy())
                     self.pg_loss = pg_loss = pg_loss - self.ent_coef * entropy
                     self.vf_loss = vf_loss = mse(tf.squeeze(train_model.value_fn), rewards_ph)
                     train_loss = pg_loss + self.vf_coef * vf_loss

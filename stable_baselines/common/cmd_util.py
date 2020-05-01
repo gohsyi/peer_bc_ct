@@ -45,7 +45,9 @@ def make_vec_env(env_id, n_envs=1, seed=None, start_index=0,
             if isinstance(env_id, str):
                 env = gym.make(env_id)
                 if len(env_kwargs) > 0:
-                    warnings.warn("No environment class was passed (only an env ID) so `env_kwargs` will be ignored")
+                    warnings.warn(
+                        "No environment class was passed (only an env ID) "
+                        "so `env_kwargs` will be ignored")
             else:
                 env = env_id(**env_kwargs)
             if seed is not None:
@@ -53,7 +55,8 @@ def make_vec_env(env_id, n_envs=1, seed=None, start_index=0,
                 env.action_space.seed(seed + rank)
             # Wrap the env in a Monitor wrapper
             # to have additional training information
-            monitor_path = os.path.join(monitor_dir, str(rank)) if monitor_dir is not None else None
+            monitor_path = os.path.join(
+                monitor_dir, str(rank)) if monitor_dir is not None else None
             # Create the monitor folder if needed
             if monitor_path is not None:
                 os.makedirs(monitor_dir, exist_ok=True)
@@ -69,7 +72,9 @@ def make_vec_env(env_id, n_envs=1, seed=None, start_index=0,
         # Default: use a DummyVecEnv
         vec_env_cls = DummyVecEnv
 
-    return vec_env_cls([make_env(i + start_index) for i in range(n_envs)], **vec_env_kwargs)
+    return vec_env_cls(
+        [make_env(i + start_index) for i in range(n_envs)],
+        **vec_env_kwargs)
 
 
 def make_atari_env(env_id, num_env, seed, wrapper_kwargs=None,
@@ -97,8 +102,10 @@ def make_atari_env(env_id, num_env, seed, wrapper_kwargs=None,
         def _thunk():
             env = make_atari(env_id)
             env.seed(seed + rank)
-            env = Monitor(env, logger.get_dir() and os.path.join(logger.get_dir(), str(rank)),
-                          allow_early_resets=allow_early_resets)
+            env = Monitor(
+                env, logger.get_dir() and os.path.join(
+                    logger.get_dir(), str(rank)),
+                allow_early_resets=allow_early_resets)
             return wrap_deepmind(env, **wrapper_kwargs)
         return _thunk
     set_global_seeds(seed)
@@ -107,8 +114,9 @@ def make_atari_env(env_id, num_env, seed, wrapper_kwargs=None,
     if num_env == 1 or not use_subprocess:
         return DummyVecEnv([make_env(i + start_index) for i in range(num_env)])
 
-    return SubprocVecEnv([make_env(i + start_index) for i in range(num_env)],
-                         start_method=start_method)
+    return SubprocVecEnv(
+        [make_env(i + start_index) for i in range(num_env)],
+        start_method=start_method)
 
 
 def make_mujoco_env(env_id, seed, allow_early_resets=True):
@@ -122,7 +130,9 @@ def make_mujoco_env(env_id, seed, allow_early_resets=True):
     """
     set_global_seeds(seed + 10000 * mpi_rank_or_zero())
     env = gym.make(env_id)
-    env = Monitor(env, os.path.join(logger.get_dir(), '0'), allow_early_resets=allow_early_resets)
+    env = Monitor(
+        env, os.path.join(logger.get_dir(), '0'),
+        allow_early_resets=allow_early_resets)
     env.seed(seed)
     return env
 
@@ -161,18 +171,24 @@ def arg_parser():
     :return: (ArgumentParser)
     """
     import argparse
-    return argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    return argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 
 def atari_arg_parser():
     """
     Create an argparse.ArgumentParser for run_atari.py.
 
-    :return: (ArgumentParser) parser {'--env': 'BreakoutNoFrameskip-v4', '--seed': 0, '--num-timesteps': int(1e7)}
+    :return: (ArgumentParser) parser {
+        '--env': 'BreakoutNoFrameskip-v4',
+        '--seed': 0,
+        '--num-timesteps': int(1e7)}
     """
     parser = arg_parser()
-    parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
-    parser.add_argument('--seed', help='RNG seed', type=int, default=0)
+    parser.add_argument('--env', default='BreakoutNoFrameskip-v4',
+                        help='environment ID')
+    parser.add_argument('--seed', type=int, default=0,
+                        help='RNG seed')
     parser.add_argument('--num-timesteps', type=int, default=int(1e7))
     return parser
 
@@ -184,8 +200,10 @@ def mujoco_arg_parser():
     :return:  (ArgumentParser) parser {'--env': 'Reacher-v2', '--seed': 0, '--num-timesteps': int(1e6), '--play': False}
     """
     parser = arg_parser()
-    parser.add_argument('--env', help='environment ID', type=str, default='Reacher-v2')
-    parser.add_argument('--seed', help='RNG seed', type=int, default=0)
+    parser.add_argument('--env', type=str, default='Reacher-v2',
+                        help='environment ID')
+    parser.add_argument('--seed', type=int, default=0,
+                        help='RNG seed')
     parser.add_argument('--num-timesteps', type=int, default=int(1e6))
     parser.add_argument('--play', default=False, action='store_true')
     return parser

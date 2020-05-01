@@ -149,8 +149,8 @@ class TRPO(ActorCriticRLModel):
                     observation = self.policy_pi.obs_ph
                     action = self.policy_pi.pdtype.sample_placeholder([None])
 
-                    kloldnew = old_policy.proba_distribution.kl(self.policy_pi.proba_distribution)
-                    ent = self.policy_pi.proba_distribution.entropy()
+                    kloldnew = old_policy.prob_dist.kl(self.policy_pi.prob_dist)
+                    ent = self.policy_pi.prob_dist.entropy()
                     meankl = tf.reduce_mean(kloldnew)
                     meanent = tf.reduce_mean(ent)
                     entbonus = self.entcoeff * meanent
@@ -158,8 +158,8 @@ class TRPO(ActorCriticRLModel):
                     vferr = tf.reduce_mean(tf.square(self.policy_pi.value_flat - ret))
 
                     # advantage * pnew / pold
-                    ratio = tf.exp(self.policy_pi.proba_distribution.logp(action) -
-                                   old_policy.proba_distribution.logp(action))
+                    ratio = tf.exp(self.policy_pi.prob_dist.logp(action) -
+                                   old_policy.prob_dist.logp(action))
                     surrgain = tf.reduce_mean(ratio * atarg)
 
                     optimgain = surrgain + entbonus

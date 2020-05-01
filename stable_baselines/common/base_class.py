@@ -43,6 +43,7 @@ class BaseRLModel(ABC):
 
     def __init__(self, policy, env, verbose=0, *, requires_vec_env, policy_base,
                  policy_kwargs=None, seed=None, n_cpu_tf_sess=None):
+
         if isinstance(policy, str) and policy_base is not None:
             self.policy = get_policy_from_name(policy_base, policy)
         else:
@@ -68,7 +69,8 @@ class BaseRLModel(ABC):
         if env is not None:
             if isinstance(env, str):
                 if self.verbose >= 1:
-                    print("Creating environment from the given name, wrapped in a DummyVecEnv.")
+                    print("Creating environment from the given name, "
+                          "wrapped in a DummyVecEnv.")
                 self.env = env = DummyVecEnv([lambda: gym.make(env)])
 
             self.observation_space = env.observation_space
@@ -89,8 +91,9 @@ class BaseRLModel(ABC):
                         self.env = _UnvecWrapper(env)
                         self._vectorize_action = True
                     else:
-                        raise ValueError("Error: the model requires a non vectorized environment or a single vectorized"
-                                         " environment.")
+                        raise ValueError(
+                            "Error: the model requires a non vectorized environment "
+                            "or a single vectorized environment.")
                 self.n_envs = 1
 
         # Get VecNormalize object if it exists
@@ -223,8 +226,9 @@ class BaseRLModel(ABC):
         Check the environment.
         """
         if self.env is None:
-            raise ValueError("Error: cannot train the model without a valid environment, please set an environment with"
-                             "set_env(self, env) method.")
+            raise ValueError(
+                "Error: cannot train the model without a valid environment, "
+                "please set an environment withset_env(self, env) method.")
         if self.episode_reward is None:
             self.episode_reward = np.zeros((self.n_envs,))
         if self.ep_info_buf is None:
@@ -249,7 +253,8 @@ class BaseRLModel(ABC):
         """
         parameters = self.get_parameter_list()
         parameter_values = self.sess.run(parameters)
-        return_dictionary = OrderedDict((param.name, value) for param, value in zip(parameters, parameter_values))
+        return_dictionary = OrderedDict(
+            (param.name, value) for param, value in zip(parameters, parameter_values))
         return return_dictionary
 
     def _setup_load_operations(self):
@@ -791,8 +796,10 @@ class ActorCriticRLModel(BaseRLModel):
         If None, the number of cpu of the current machine will be used.
     """
 
-    def __init__(self, policy, env, _init_setup_model, verbose=0, policy_base=ActorCriticPolicy,
-                 requires_vec_env=False, policy_kwargs=None, seed=None, n_cpu_tf_sess=None):
+    def __init__(self, policy, env, _init_setup_model, verbose=0,
+                 policy_base=ActorCriticPolicy, requires_vec_env=False,
+                 policy_kwargs=None, seed=None, n_cpu_tf_sess=None):
+
         super(ActorCriticRLModel, self).__init__(
             policy, env, verbose=verbose, requires_vec_env=requires_vec_env,
             policy_base=policy_base, policy_kwargs=policy_kwargs,
