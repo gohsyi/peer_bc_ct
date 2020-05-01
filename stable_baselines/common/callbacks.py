@@ -7,7 +7,8 @@ from typing import Union, List, Dict, Any, Optional
 import gym
 import numpy as np
 
-from stable_baselines.common.vec_env import VecEnv, sync_envs_normalization, DummyVecEnv
+from stable_baselines.common.vec_env import (
+    VecEnv, sync_envs_normalization, DummyVecEnv)
 from stable_baselines.common.evaluation import evaluate_policy
 from stable_baselines import logger
 
@@ -53,7 +54,8 @@ class BaseCallback(ABC):
     def _init_callback(self) -> None:
         pass
 
-    def on_training_start(self, locals_: Dict[str, Any], globals_: Dict[str, Any]) -> None:
+    def on_training_start(
+            self, locals_: Dict[str, Any], globals_: Dict[str, Any]) -> None:
         # Those are reference and will be updated automatically
         self.locals = locals_
         self.globals = globals_

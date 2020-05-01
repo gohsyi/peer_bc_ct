@@ -1,12 +1,63 @@
+import os
+import copy
+import numpy as np
+import tensorflow as tf
+
 from stable_baselines import PPO2, logger
-from stable_baselines.common.cmd_util import make_atari_env, atari_arg_parser
-from stable_baselines.common.policies import CnnPolicy, CnnLstmPolicy, \
-    CnnLnLstmPolicy, MlpPolicy
 from stable_baselines.common.vec_env import VecFrameStack
+from stable_baselines.common.callbacks import BaseCallback
+from stable_baselines.common.cmd_util import (
+    make_atari_env, atari_arg_parser)
+from stable_baselines.common.policies import (
+    CnnPolicy, CnnLstmPolicy, CnnLnLstmPolicy, MlpPolicy)
+
+
+class View():
+    def __init__(self, model, peer=0., learning_rate=2.5e-4, epsilon=1e-5):
+        self.model = model
+        self.peer = peer
+        self.learning_rate = learning_rate
+        self.epsilon = epsilon
+
+        with self.model.graph.as_default():
+            with tf.variable_scope('copier'):
+                self.obs_ph, self.actions_ph, self.actions_logits_ph = \
+                    self.model._get_pretrain_placeholders()
+                actions_ph = tf.expand_dims(self.actions_ph, axis=1)
+                one_hot_actions = tf.one_hot(actions_ph, self.model.action_space.n)
+                self.loss = tf.nn.softmax_cross_entropy_with_logits_v2(
+                    logits=self.actions_logits_ph,
+                    labels=tf.stop_gradient(one_hot_actions))
+                self.loss = tf.reduce_mean(self.loss)
+                # calculate peer term
+                self.peer_actions_ph = tf.placeholder(
+                    actions_ph.dtype, actions_ph.shape, "peer_action_ph")
+                peer_onehot_actions = tf.one_hot(
+                    self.peer_actions_ph, self.model.action_space.n)
+                peer_term = tf.nn.softmax_cross_entropy_with_logits_v2(
+                    logits=self.actions_logits_ph,
+                    labels=tf.stop_gradient(peer_onehot_actions))
+                peer_term = tf.reduce_mean(peer_term)
+                self.loss -= self.peer * peer_term
+
+            self.optim_op = self.model.trainer.minimize(
+                self.loss, var_list=self.model.params)
+
+    def learn(self, obses, actions):
+        peer_actions = copy.deepcopy(actions)
+        np.random.shuffle(peer_actions)
+        train_loss, _ = self.model.sess.run([self.loss, self.optim_op], {
+            self.obs_ph: obses,
+            self.actions_ph: actions[: None],
+            self.peer_actions_ph: peer_actions[:, None],
+            self.model.learning_rate_ph: self.learning_rate
+        })
+        logger.logkv("copier loss", train_loss)
+        logger.dumpkvs()
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128):
+          n_steps=128, peer=0.):
     """
     Train PPO2 model for atari environment, for testing purposes
 
@@ -18,17 +69,18 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
     :param nminibatches: (int) Number of training minibatches per update.
         For recurrent policies, the number of environments run in parallel
         should be a multiple of nminibatches.
-    :param n_steps: (int) The number of steps to run for each environment per update
-        (i.e. batch size is n_steps * n_env where n_env
-        is number of environment copies running in parallel)
+    :param n_steps: (int) The number of steps to run for each environment
+        per update (i.e. batch size is n_steps * n_env where n_env is
+        number of environment copies running in parallel)
     """
 
-    env = VecFrameStack(make_atari_env(env_id, n_envs, seed), 4)
     policy = {
         'cnn': CnnPolicy,
         'lstm': CnnLstmPolicy,
         'lnlstm': CnnLnLstmPolicy,
-        'mlp': MlpPolicy}[policy]
+        'mlp': MlpPolicy
+    }[policy]
+
     models = {
         "A": PPO2(
             policy=policy, policy_kwargs={'view': 'even'}, n_steps=n_steps,
@@ -43,11 +95,16 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
             ent_coef=.01, learning_rate=2.5e-4,
             cliprange=lambda f: f * 0.1, verbose=1)}
 
+    views = {view: View(models[view], peer=peer) for view in ("A", "B")}
+
     n_batch = n_envs * n_steps
     n_updates = num_timesteps // n_batch
     for t in range(n_updates):
         for view in "A", "B":
             models[view].learn(n_batch)
+        for view, other_view in zip(("A", "B"), ("B", "A")):
+            obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
+            views[view].learn(obses, actions)
 
     for view in "A", "B":
         models[view].env.close()
@@ -61,15 +118,22 @@ def main():
     parser = atari_arg_parser()
     parser.add_argument('--policy', choices=['cnn', 'lstm', 'lnlstm', 'mlp'],
                         default='cnn', help='Policy architecture')
-    parser.add_argument('--log', type=str, default='test',
-                        help='Log ID')
+    parser.add_argument('--peer', type=float, default=0.,
+                        help='Coefficient of the peer term. (default: 0)')
+    parser.add_argument('--log', type=str, default='logs',
+                        help='Log note')
+    parser.add_argument('--note', type=str, default='test',
+                        help='Log path')
     args = parser.parse_args()
-    logger.configure(args.log)
+    logger.configure(os.path.join(args.log, args.env, args.note))
+    logger.info(args)
     train(
         args.env,
         num_timesteps=args.num_timesteps,
         seed=args.seed,
-        policy=args.policy)
+        policy=args.policy,
+        peer=args.peer,
+    )
 
 
 if __name__ == '__main__':

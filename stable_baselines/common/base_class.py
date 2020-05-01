@@ -187,9 +187,9 @@ class BaseRLModel(ABC):
         """
         pass
 
-    def _init_callback(self,
-                      callback: Union[None, Callable, List[BaseCallback], BaseCallback]
-                      ) -> BaseCallback:
+    def _init_callback(
+            self, callback: Union[None, Callable, List[BaseCallback], BaseCallback]
+    ) -> BaseCallback:
         """
         :param callback: (Union[None, Callable, List[BaseCallback], BaseCallback])
         :return: (BaseCallback)
@@ -326,7 +326,8 @@ class BaseRLModel(ABC):
         with self.graph.as_default():
             with tf.variable_scope('pretrain'):
                 if continuous_actions:
-                    obs_ph, actions_ph, deterministic_actions_ph = self._get_pretrain_placeholders()
+                    obs_ph, actions_ph, deterministic_actions_ph = \
+                        self._get_pretrain_placeholders()
                     loss = tf.reduce_mean(tf.square(actions_ph - deterministic_actions_ph))
                 else:
                     obs_ph, actions_ph, actions_logits_ph = self._get_pretrain_placeholders()
@@ -339,14 +340,17 @@ class BaseRLModel(ABC):
                         labels=tf.stop_gradient(one_hot_actions))
                     loss = tf.reduce_mean(loss)
                     # calculate peer term
-                    peer_actions_ph = tf.placeholder(actions_ph.dtype, actions_ph.shape, "peer_action_ph")
-                    peer_onehot_actions = tf.one_hot(peer_actions_ph, self.action_space.n)
+                    peer_actions_ph = tf.placeholder(
+                        actions_ph.dtype, actions_ph.shape, "peer_action_ph")
+                    peer_onehot_actions = tf.one_hot(
+                        peer_actions_ph, self.action_space.n)
                     peer_term = tf.nn.softmax_cross_entropy_with_logits_v2(
                         logits=actions_logits_ph,
                         labels=tf.stop_gradient(peer_onehot_actions))
                     peer_term = tf.reduce_mean(peer_term)
                     loss -= peer * peer_term
-                optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, epsilon=adam_epsilon)
+                optimizer = tf.train.AdamOptimizer(
+                    learning_rate=learning_rate, epsilon=adam_epsilon)
                 optim_op = optimizer.minimize(loss, var_list=self.params)
 
             self.sess.run(tf.global_variables_initializer())

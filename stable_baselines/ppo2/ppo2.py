@@ -247,9 +247,9 @@ class PPO2(ActorCriticRLModel):
                         grads, _grad_norm = tf.clip_by_global_norm(
                             grads, self.max_grad_norm)
                     grads = list(zip(grads, self.params))
-                trainer = tf.train.AdamOptimizer(
+                self.trainer = tf.train.AdamOptimizer(
                     learning_rate=self.learning_rate_ph, epsilon=1e-5)
-                self._train = trainer.apply_gradients(grads)
+                self._train = self.trainer.apply_gradients(grads)
 
                 self.loss_names = [
                     'policy_loss', 'value_loss', 'policy_entropy', 'approxkl',
@@ -414,10 +414,10 @@ class PPO2(ActorCriticRLModel):
 
                 callback.on_rollout_start()
                 # true_reward is the reward without discount
-                rollout = self.runner.run(callback)
+                self.rollout = self.runner.run(callback)
                 # Unpack
-                (obs, returns, masks, actions, values,
-                 neglogpacs, states, ep_infos, true_reward) = rollout
+                (obses, returns, masks, actions, values,
+                 neglogpacs, states, ep_infos, true_reward) = self.rollout
                 callback.on_rollout_end()
 
                 # Early stopping due to the callback
@@ -438,7 +438,7 @@ class PPO2(ActorCriticRLModel):
                             end = start + batch_size
                             mbinds = inds[start:end]
                             slices = (arr[mbinds] for arr in (
-                                obs, returns, masks, actions, values, neglogpacs))
+                                obses, returns, masks, actions, values, neglogpacs))
                             mb_loss_vals.append(self._train_step(
                                 lr_now, cliprange_now, *slices, writer=writer,
                                 update=timestep, cliprange_vf=cliprange_vf_now))
@@ -460,7 +460,7 @@ class PPO2(ActorCriticRLModel):
                             mb_env_inds = env_indices[start:end]
                             mb_flat_inds = flat_indices[mb_env_inds].ravel()
                             slices = (arr[mb_flat_inds] for arr in (
-                                obs, returns, masks, actions, values, neglogpacs))
+                                obses, returns, masks, actions, values, neglogpacs))
                             mb_states = states[mb_env_inds]
                             mb_loss_vals.append(self._train_step(
                                 lr_now, cliprange_now, *slices,
@@ -560,14 +560,14 @@ class Runner(AbstractEnvRunner):
             - infos: (dict) the extra information of the model
         """
         # mb stands for minibatch
-        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = \
-            [], [], [], [], [], []
+        mb_obses, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = (
+            [] for _ in range(6))
         mb_states = self.states
         ep_infos = []
         for _ in range(self.n_steps):
             actions, values, self.states, neglogpacs = self.model.step(
                 self.obs, self.states, self.dones)
-            mb_obs.append(self.obs.copy())
+            mb_obses.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
             mb_neglogpacs.append(neglogpacs)
@@ -594,7 +594,7 @@ class Runner(AbstractEnvRunner):
                     ep_infos.append(maybe_ep_info)
             mb_rewards.append(rewards)
         # batch of steps to batch of rollouts
-        mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
+        mb_obses = np.asarray(mb_obses, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
         mb_actions = np.asarray(mb_actions)
         mb_values = np.asarray(mb_values, dtype=np.float32)
@@ -618,13 +618,13 @@ class Runner(AbstractEnvRunner):
                     delta + self.gamma * self.lam * nextnonterminal * last_gae_lam)
         mb_returns = mb_advs + mb_values
 
-        (mb_obs, mb_returns, mb_dones, mb_actions,
+        (mb_obses, mb_returns, mb_dones, mb_actions,
          mb_values, mb_neglogpacs, true_reward) = map(
             swap_and_flatten,
-            (mb_obs, mb_returns, mb_dones, mb_actions,
+            (mb_obses, mb_returns, mb_dones, mb_actions,
              mb_values, mb_neglogpacs, true_reward))
 
-        return (mb_obs, mb_returns, mb_dones, mb_actions,
+        return (mb_obses, mb_returns, mb_dones, mb_actions,
                 mb_values, mb_neglogpacs, mb_states, ep_infos, true_reward)
 
 
