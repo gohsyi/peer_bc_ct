@@ -49,10 +49,13 @@ def main():
     Runs the test
     """
     parser = atari_arg_parser()
-    parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm', 'mlp'], default='cnn')
+    parser.add_argument('--policy', choices=['cnn', 'lstm', 'lnlstm', 'mlp'],
+                        default='cnn', help='Policy architecture', )
     args = parser.parse_args()
-    logger.configure()
-    train(args.env, num_timesteps=args.num_timesteps, seed=args.seed, policy=args.policy)
+    import os
+    logger.configure(os.path.join('logs', args.env, 'baseline'))
+    train(args.env, num_timesteps=args.num_timesteps, seed=args.seed,
+          policy=args.policy)
 
 
 if __name__ == '__main__':

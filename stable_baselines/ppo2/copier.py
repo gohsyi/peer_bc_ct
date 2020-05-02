@@ -57,7 +57,7 @@ class View():
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128, peer=0.):
+          n_steps=128, peer=0., individual=False):
     """
     Train PPO2 model for atari environment, for testing purposes
 
@@ -102,9 +102,10 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
     for t in range(n_updates):
         for view in "A", "B":
             models[view].learn(n_batch)
-        for view, other_view in zip(("A", "B"), ("B", "A")):
-            obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
-            views[view].learn(obses, actions)
+        if not individual:
+            for view, other_view in zip(("A", "B"), ("B", "A")):
+                obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
+                views[view].learn(obses, actions)
 
     for view in "A", "B":
         models[view].env.close()
@@ -124,6 +125,8 @@ def main():
                         help='Log note')
     parser.add_argument('--note', type=str, default='test',
                         help='Log path')
+    parser.add_argument('--individual', action='store_true', default=False,
+                        help='If true, no co-training is applied.')
     args = parser.parse_args()
     logger.configure(os.path.join(args.log, args.env, args.note))
     logger.info(args)
@@ -133,6 +136,7 @@ def main():
         seed=args.seed,
         policy=args.policy,
         peer=args.peer,
+        individual=args.individual
     )
 
 
