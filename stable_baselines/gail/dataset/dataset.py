@@ -14,13 +14,16 @@ class ExpertDataset(object):
     Dataset for using behavior cloning or GAIL.
 
     The structure of the expert dataset is a dict, saved as an ".npz" archive.
-    The dictionary contains the keys 'actions', 'episode_returns', 'rewards', 'obs' and 'episode_starts'.
-    The corresponding values have data concatenated across episode: the first axis is the timestep,
-    the remaining axes index into the data. In case of images, 'obs' contains the relative path to
+    The dictionary contains the keys 'actions', 'episode_returns', 'rewards',
+    'obs' and 'episode_starts'. The corresponding values have data concatenated
+    across episode: the first axis is the timestep, the remaining axes index
+    into the data. In case of images, 'obs' contains the relative path to
     the images, to enable space saving from image compression.
 
-    :param expert_path: (str) The path to trajectory data (.npz file). Mutually exclusive with traj_data.
-    :param traj_data: (dict) Trajectory data, in format described above. Mutually exclusive with expert_path.
+    :param expert_path: (str) The path to trajectory data (.npz file).
+        Mutually exclusive with traj_data.
+    :param traj_data: (dict) Trajectory data, in format described above.
+        Mutually exclusive with expert_path.
     :param train_fraction: (float) the train validation split (0 to 1)
         for pre-training using behavior cloning (BC)
     :param batch_size: (int) the minibatch size for behavior cloning
@@ -31,8 +34,10 @@ class ExpertDataset(object):
         the data (slower but use less memory for the CI)
     """
 
-    def __init__(self, expert_path=None, traj_data=None, train_fraction=0.7, batch_size=64,
-                 traj_limitation=-1, randomize=True, verbose=1, sequential_preprocessing=False):
+    def __init__(self, expert_path=None, traj_data=None, train_fraction=0.7,
+                 batch_size=64, traj_limitation=-1, randomize=True, verbose=1,
+                 sequential_preprocessing=False):
+
         if traj_data is not None and expert_path is not None:
             raise ValueError("Cannot specify both 'traj_data' and 'expert_path'")
         if traj_data is None and expert_path is None:
@@ -67,7 +72,8 @@ class ExpertDataset(object):
         # S = (1, ) for discrete space
         # Flatten to (N * L, prod(S))
         if len(observations.shape) > 2:
-            observations = np.reshape(observations, [-1, np.prod(observations.shape[1:])])
+            observations = np.reshape(
+                observations, [-1, np.prod(observations.shape[1:])])
         if len(actions.shape) > 2:
             actions = np.reshape(actions, [-1, np.prod(actions.shape[1:])])
 
@@ -88,8 +94,9 @@ class ExpertDataset(object):
         self.std_ret = np.std(np.array(self.returns))
         self.verbose = verbose
 
-        assert len(self.observations) == len(self.actions), \
-            "The number of actions and observations differ please check your expert dataset"
+        assert len(self.observations) == len(self.actions), (
+            "The number of actions and observations differ "
+            "please check your expert dataset")
         self.num_traj = min(traj_limitation, np.sum(episode_starts))
         self.num_transition = len(self.observations)
         self.randomize = randomize
@@ -97,10 +104,12 @@ class ExpertDataset(object):
 
         self.dataloader = None
         self.train_loader = DataLoader(
-            train_indices, self.observations, self.actions, batch_size, shuffle=self.randomize, start_process=False,
+            train_indices, self.observations, self.actions, batch_size,
+            shuffle=self.randomize, start_process=False,
             sequential=sequential_preprocessing)
         self.val_loader = DataLoader(
-            val_indices, self.observations, self.actions, batch_size, shuffle=self.randomize, start_process=False,
+            val_indices, self.observations, self.actions, batch_size,
+            shuffle=self.randomize, start_process=False,
             sequential=sequential_preprocessing)
 
         if self.verbose >= 1:
@@ -114,7 +123,8 @@ class ExpertDataset(object):
         """
         indices = np.random.permutation(len(self.observations)).astype(np.int64)
         self.dataloader = DataLoader(
-            indices, self.observations, self.actions, batch_size, shuffle=self.randomize, start_process=False,
+            indices, self.observations, self.actions, batch_size,
+            shuffle=self.randomize, start_process=False,
             sequential=self.sequential_preprocessing)
 
     def __del__(self):
@@ -182,20 +192,22 @@ class DataLoader(object):
     :param batch_size: (int) Number of samples per minibatch
     :param n_workers: (int) number of preprocessing worker (for loading the images)
     :param infinite_loop: (bool) whether to have an iterator that can be reset
-    :param max_queue_len: (int) Max number of minibatches that can be preprocessed at the same time
+    :param max_queue_len: (int) Max number of minibatches that can be preprocessed
+        at the same time
     :param shuffle: (bool) Shuffle the minibatch after each epoch
     :param start_process: (bool) Start the preprocessing process (default: True)
-    :param backend: (str) joblib backend (one of 'multiprocessing', 'sequential', 'threading'
-        or 'loky' in newest versions)
+    :param backend: (str) joblib backend (one of 'multiprocessing', 'sequential',
+        'threading' or 'loky' in newest versions)
     :param sequential: (bool) Do not use subprocess to preprocess the data
         (slower but use less memory for the CI)
-    :param partial_minibatch: (bool) Allow partial minibatches (minibatches with a number of element
-        lesser than the batch_size)
+    :param partial_minibatch: (bool) Allow partial minibatches (minibatches with
+        a number of element lesser than the batch_size)
     """
 
     def __init__(self, indices, observations, actions, batch_size, n_workers=1,
-                 infinite_loop=True, max_queue_len=1, shuffle=False,
-                 start_process=True, backend='threading', sequential=False, partial_minibatch=True):
+                 infinite_loop=True, max_queue_len=1, shuffle=False, start_process=True,
+                 backend='threading', sequential=False, partial_minibatch=True):
+
         super(DataLoader, self).__init__()
         self.n_workers = n_workers
         self.infinite_loop = infinite_loop
@@ -253,8 +265,8 @@ class DataLoader(object):
 
         obs = self.observations[self._minibatch_indices]
         if self.load_images:
-            obs = np.concatenate([self._make_batch_element(image_path) for image_path in obs],
-                                 axis=0)
+            obs = np.concatenate(
+                [self._make_batch_element(image_path) for image_path in obs], axis=0)
 
         actions = self.actions[self._minibatch_indices]
         self.start_idx += self.batch_size
@@ -262,7 +274,8 @@ class DataLoader(object):
 
     def _run(self):
         start = True
-        with Parallel(n_jobs=self.n_workers, batch_size="auto", backend=self.backend) as parallel:
+        with Parallel(n_jobs=self.n_workers, batch_size="auto", backend=self.backend) \
+                as parallel:
             while start or self.infinite_loop:
                 start = False
 
@@ -276,17 +289,17 @@ class DataLoader(object):
                     obs = self.observations[self._minibatch_indices]
                     if self.load_images:
                         if self.n_workers <= 1:
-                            obs = [self._make_batch_element(image_path)
-                                   for image_path in obs]
-
+                            obs = [
+                                self._make_batch_element(image_path)
+                                for image_path in obs]
                         else:
-                            obs = parallel(delayed(self._make_batch_element)(image_path)
-                                           for image_path in obs)
+                            obs = parallel(
+                                delayed(self._make_batch_element)(image_path)
+                                for image_path in obs)
 
                         obs = np.concatenate(obs, axis=0)
 
                     actions = self.actions[self._minibatch_indices]
-
                     self.queue.put((obs, actions))
 
                     # Free memory

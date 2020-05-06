@@ -241,12 +241,9 @@ class EvalCallback(EventCallback):
     """
     def __init__(self, eval_env: Union[gym.Env, VecEnv],
                  callback_on_new_best: Optional[BaseCallback] = None,
-                 n_eval_episodes: int = 5,
-                 eval_freq: int = 10000,
-                 log_path: str = None,
-                 best_model_save_path: str = None,
-                 deterministic: bool = True,
-                 render: bool = False,
+                 n_eval_episodes: int = 5, eval_freq: int = 10000,
+                 log_path: str = None, best_model_save_path: str = None,
+                 deterministic: bool = True, render: bool = False,
                  verbose: int = 1):
         super(EvalCallback, self).__init__(callback_on_new_best, verbose=verbose)
         self.n_eval_episodes = n_eval_episodes
@@ -260,7 +257,8 @@ class EvalCallback(EventCallback):
         if not isinstance(eval_env, VecEnv):
             eval_env = DummyVecEnv([lambda: eval_env])
 
-        assert eval_env.num_envs == 1, "You must pass only one environment for evaluation"
+        assert eval_env.num_envs == 1, (
+            "You must pass only one environment for evaluation")
 
         self.eval_env = eval_env
         self.best_model_save_path = best_model_save_path
@@ -273,7 +271,8 @@ class EvalCallback(EventCallback):
         self.evaluations_length = []
 
     def _init_callback(self):
-        # Does not work in some corner cases, where the wrapper is not the same
+        # Does not work in some corner cases,
+        # where the wrapper is not the same
         if not type(self.training_env) is type(self.eval_env):
             warnings.warn("Training and eval env are not of the same type"
                           "{} != {}".format(self.training_env, self.eval_env))
@@ -290,34 +289,45 @@ class EvalCallback(EventCallback):
             # Sync training and eval env if there is VecNormalize
             sync_envs_normalization(self.training_env, self.eval_env)
 
-            episode_rewards, episode_lengths = evaluate_policy(self.model, self.eval_env,
-                                                               n_eval_episodes=self.n_eval_episodes,
-                                                               render=self.render,
-                                                               deterministic=self.deterministic,
-                                                               return_episode_rewards=True)
+            episode_rewards, episode_lengths = evaluate_policy(
+                self.model, self.eval_env,
+                n_eval_episodes=self.n_eval_episodes,
+                render=self.render,
+                deterministic=self.deterministic,
+                return_episode_rewards=True)
 
             if self.log_path is not None:
                 self.evaluations_timesteps.append(self.num_timesteps)
                 self.evaluations_results.append(episode_rewards)
                 self.evaluations_length.append(episode_lengths)
-                np.savez(self.log_path, timesteps=self.evaluations_timesteps,
-                         results=self.evaluations_results, ep_lengths=self.evaluations_length)
+                np.savez(
+                    self.log_path,
+                    timesteps=self.evaluations_timesteps,
+                    results=self.evaluations_results,
+                    ep_lengths=self.evaluations_length)
 
-            mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
-            mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
-            # Keep track of the last evaluation, useful for classes that derive from this callback
+            mean_reward, std_reward = (
+                np.mean(episode_rewards), np.std(episode_rewards))
+            mean_ep_length, std_ep_length = (
+                np.mean(episode_lengths), np.std(episode_lengths))
+
+            # Keep track of the last evaluation,
+            # useful for classes that derive from this callback
             self.last_mean_reward = mean_reward
 
             if self.verbose > 0:
                 print("Eval num_timesteps={}, "
-                      "episode_reward={:.2f} +/- {:.2f}".format(self.num_timesteps, mean_reward, std_reward))
-                print("Episode length: {:.2f} +/- {:.2f}".format(mean_ep_length, std_ep_length))
+                      "episode_reward={:.2f} +/- {:.2f}".format(
+                    self.num_timesteps, mean_reward, std_reward))
+                print("Episode length: {:.2f} +/- {:.2f}".format(
+                    mean_ep_length, std_ep_length))
 
             if mean_reward > self.best_mean_reward:
                 if self.verbose > 0:
                     print("New best mean reward!")
                 if self.best_model_save_path is not None:
-                    self.model.save(os.path.join(self.best_model_save_path, 'best_model'))
+                    self.model.save(os.path.join(
+                        self.best_model_save_path, 'best_model'))
                 self.best_mean_reward = mean_reward
                 # Trigger callback if needed
                 if self.callback is not None:
@@ -342,13 +352,15 @@ class StopTrainingOnRewardThreshold(BaseCallback):
         self.reward_threshold = reward_threshold
 
     def _on_step(self) -> bool:
-        assert self.parent is not None, ("`StopTrainingOnRewardThreshold` callback must be used "
-                                         "with an `EvalCallback`")
+        assert self.parent is not None, (
+            "`StopTrainingOnRewardThreshold` callback must be used "
+            "with an `EvalCallback`")
         # Convert np.bool to bool, otherwise callback.on_step() is False won't work
         continue_training = bool(self.parent.best_mean_reward < self.reward_threshold)
         if self.verbose > 0 and not continue_training:
             print("Stopping training because the mean reward {:.2f} "
-                  " is above the threshold {}".format(self.parent.best_mean_reward, self.reward_threshold))
+                  " is above the threshold {}".format(
+                      self.parent.best_mean_reward, self.reward_threshold))
         return continue_training
 
 

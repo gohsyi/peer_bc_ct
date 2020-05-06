@@ -26,7 +26,8 @@ def evaluate_policy(model, env, n_eval_episodes=10, deterministic=True,
         returns ([float], [int]) when `return_episode_rewards` is True
     """
     if isinstance(env, VecEnv):
-        assert env.num_envs == 1, "You must pass only one environment when using this function"
+        assert env.num_envs == 1, (
+            "You must pass only one environment when using this function")
 
     episode_rewards, episode_lengths = [], []
     for _ in range(n_eval_episodes):
@@ -35,7 +36,8 @@ def evaluate_policy(model, env, n_eval_episodes=10, deterministic=True,
         episode_reward = 0.0
         episode_length = 0
         while not done:
-            action, state = model.predict(obs, state=state, deterministic=deterministic)
+            action, state = model.predict(
+                obs, state=state, deterministic=deterministic)
             obs, reward, done, _info = env.step(action)
             episode_reward += reward
             if callback is not None:
@@ -50,8 +52,9 @@ def evaluate_policy(model, env, n_eval_episodes=10, deterministic=True,
     std_reward = np.std(episode_rewards)
 
     if reward_threshold is not None:
-        assert mean_reward > reward_threshold, 'Mean reward below threshold: '\
-                                         '{:.2f} < {:.2f}'.format(mean_reward, reward_threshold)
+        assert mean_reward > reward_threshold, (
+            'Mean reward below threshold: {:.2f} < {:.2f}'.format(
+                mean_reward, reward_threshold))
     if return_episode_rewards:
         return episode_rewards, episode_lengths
     return mean_reward, std_reward

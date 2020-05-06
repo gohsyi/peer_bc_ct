@@ -38,7 +38,8 @@ class View():
                     logits=self.actions_logits_ph,
                     labels=tf.stop_gradient(peer_onehot_actions))
                 peer_term = tf.reduce_mean(peer_term)
-                self.loss -= self.peer * peer_term
+                self.peer_term = self.peer * peer_term
+                self.loss -= self.peer_term
 
             self.optim_op = self.model.trainer.minimize(
                 self.loss, var_list=self.model.params)
@@ -46,13 +47,16 @@ class View():
     def learn(self, obses, actions):
         peer_actions = copy.deepcopy(actions)
         np.random.shuffle(peer_actions)
-        train_loss, _ = self.model.sess.run([self.loss, self.optim_op], {
+        feed_dict = {
             self.obs_ph: obses,
             self.actions_ph: actions[: None],
             self.peer_actions_ph: peer_actions[:, None],
             self.model.learning_rate_ph: self.learning_rate
-        })
+        }
+        train_loss, peer_loss, _ = self.model.sess.run(
+            [self.loss, self.peer_term, self.optim_op], feed_dict)
         logger.logkv("copier loss", train_loss)
+        logger.logkv("peer term", peer_loss)
         logger.dumpkvs()
 
 

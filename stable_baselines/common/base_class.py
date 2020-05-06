@@ -328,10 +328,13 @@ class BaseRLModel(ABC):
                 if continuous_actions:
                     obs_ph, actions_ph, deterministic_actions_ph = \
                         self._get_pretrain_placeholders()
-                    loss = tf.reduce_mean(tf.square(actions_ph - deterministic_actions_ph))
+                    loss = tf.reduce_mean(tf.square(
+                        actions_ph - deterministic_actions_ph))
                 else:
-                    obs_ph, actions_ph, actions_logits_ph = self._get_pretrain_placeholders()
-                    # actions_ph has a shape if (n_batch,), we reshape it to (n_batch, 1)
+                    obs_ph, actions_ph, actions_logits_ph = \
+                        self._get_pretrain_placeholders()
+                    # actions_ph has a shape if (n_batch,), we reshape it to
+                    # (n_batch, 1)
                     # so no additional changes is needed in the dataloader
                     actions_ph = tf.expand_dims(actions_ph, axis=1)
                     one_hot_actions = tf.one_hot(actions_ph, self.action_space.n)
@@ -356,7 +359,8 @@ class BaseRLModel(ABC):
             self.sess.run(tf.global_variables_initializer())
 
         if self.verbose > 0:
-            print(f"Pretraining with{' Peer ' if peer else ' '}Behavior Cloning...")
+            print(f"Pretraining with"
+                  f"{' Peer ' if peer else ' '}Behavior Cloning...")
 
         for epoch_idx in range(int(n_epochs)):
             train_loss = 0.0
@@ -368,7 +372,8 @@ class BaseRLModel(ABC):
                 feed_dict = {
                     obs_ph: expert_obs,
                     actions_ph: expert_actions,
-                    peer_actions_ph: peer_expert_actions}
+                    peer_actions_ph: peer_expert_actions
+                }
                 train_loss_, _ = self.sess.run([loss, optim_op], feed_dict)
                 train_loss += train_loss_
 
@@ -388,10 +393,33 @@ class BaseRLModel(ABC):
                     val_loss += val_loss_
 
                 val_loss /= len(dataset.val_loader)
+
+                # validate
+                env = self.get_env()
+                obs = env.reset()
+                reward_sum = 0.0
+                reward_log = []
+                for _ in range(env.spec.max_episode_steps):
+                    action, _ = self.predict(obs)
+                    obs, reward, done, _ = env.step(action)
+                    reward_sum += reward
+                    if done:
+                        reward_log.append(reward_sum)
+                        reward_sum = 0.0
+                        obs = env.reset()
+                env.close()
+                logger.logkv('ep_reward_mean', np.mean(reward_log))
+                logger.logkv('ep_reward_std', np.std(reward_log))
+                logger.logkv('training_loss', train_loss)
+                logger.logkv('val_loss', val_loss)
+                logger.dumpkvs()
+
                 if self.verbose > 0:
-                    print("==== Training progress {:.2f}% ====".format(100 * (epoch_idx + 1) / n_epochs))
+                    print("==== Training progress {:.2f}% ====".format(
+                        100 * (epoch_idx + 1) / n_epochs))
                     print('Epoch {}'.format(epoch_idx + 1))
-                    print("Training loss: {:.6f}, Validation loss: {:.6f}".format(train_loss, val_loss))
+                    print("Training loss: {:.6f}, Validation loss: {:.6f}".format(
+                        train_loss, val_loss))
                     print()
             # Free memory
             del expert_obs, expert_actions
