@@ -179,8 +179,9 @@ class WarpFrame(gym.ObservationWrapper):
         gym.ObservationWrapper.__init__(self, env)
         self.width = 84
         self.height = 84
-        self.observation_space = spaces.Box(low=0, high=255, shape=(self.height, self.width, 1),
-                                            dtype=env.observation_space.dtype)
+        self.observation_space = spaces.Box(
+            low=0, high=255, shape=(self.height, self.width, 1),
+            dtype=env.observation_space.dtype)
 
     def observation(self, frame):
         """
@@ -211,8 +212,9 @@ class FrameStack(gym.Wrapper):
         self.n_frames = n_frames
         self.frames = deque([], maxlen=n_frames)
         shp = env.observation_space.shape
-        self.observation_space = spaces.Box(low=0, high=255, shape=(shp[0], shp[1], shp[2] * n_frames),
-                                            dtype=env.observation_space.dtype)
+        self.observation_space = spaces.Box(
+            low=0, high=255, shape=(shp[0], shp[1], shp[2] * n_frames),
+            dtype=env.observation_space.dtype)
 
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)

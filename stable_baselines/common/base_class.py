@@ -399,15 +399,16 @@ class BaseRLModel(ABC):
                 obs = env.reset()
                 reward_sum = 0.0
                 reward_log = []
-                for _ in range(env.spec.max_episode_steps):
-                    action, _ = self.predict(obs)
-                    obs, reward, done, _ = env.step(action)
-                    reward_sum += reward
-                    if done:
-                        reward_log.append(reward_sum)
-                        reward_sum = 0.0
-                        obs = env.reset()
-                env.close()
+                for _ in range(8):
+                    while True:
+                        action, _ = self.predict(obs)
+                        obs, reward, done, _ = env.step(action)
+                        reward_sum += reward
+                        if done:
+                            reward_log.append(reward_sum)
+                            reward_sum = 0.0
+                            obs = env.reset()
+                            break
                 logger.logkv('ep_reward_mean', np.mean(reward_log))
                 logger.logkv('ep_reward_std', np.std(reward_log))
                 logger.logkv('training_loss', train_loss)
@@ -865,7 +866,7 @@ class ActorCriticRLModel(BaseRLModel):
     def setup_model(self):
         pass
 
-    @abstractmethod
+
     def learn(self, total_timesteps, callback=None,
               log_interval=100, tb_log_name="run", reset_num_timesteps=True):
         pass

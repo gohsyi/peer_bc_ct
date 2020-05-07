@@ -43,9 +43,12 @@ class Monitor(gym.Wrapper):
                 else:
                     filename = filename + "." + Monitor.EXT
             self.file_handler = open(filename, "wt")
-            self.file_handler.write('#%s\n' % json.dumps({"t_start": self.t_start, 'env_id': env.spec and env.spec.id}))
-            self.logger = csv.DictWriter(self.file_handler,
-                                         fieldnames=('r', 'l', 't') + reset_keywords + info_keywords)
+            self.file_handler.write('#%s\n' % json.dumps({
+                "t_start": self.t_start,
+                'env_id': env.spec and env.spec.id}))
+            self.logger = csv.DictWriter(
+                self.file_handler,
+                fieldnames=('r', 'l', 't') + reset_keywords + info_keywords)
             self.logger.writeheader()
             self.file_handler.flush()
 
@@ -58,18 +61,22 @@ class Monitor(gym.Wrapper):
         self.episode_lengths = []
         self.episode_times = []
         self.total_steps = 0
-        self.current_reset_info = {}  # extra info about the current episode, that was passed in during reset()
+        self.current_reset_info = {}
+        # extra info about the current episode,
+        # that was passed in during reset()
 
     def reset(self, **kwargs) -> np.ndarray:
         """
-        Calls the Gym environment reset. Can only be called if the environment is over, or if allow_early_resets is True
+        Calls the Gym environment reset. Can only be called if the environment is over,
+        or if allow_early_resets is True
 
         :param kwargs: Extra keywords saved for the next episode. only if defined by reset_keywords
         :return: (np.ndarray) the first observation of the environment
         """
         if not self.allow_early_resets and not self.needs_reset:
-            raise RuntimeError("Tried to reset an environment before done. If you want to allow early resets, "
-                               "wrap your env with Monitor(env, path, allow_early_resets=True)")
+            raise RuntimeError(
+                "Tried to reset an environment before done. If you want to allow early resets, "
+                "wrap your env with Monitor(env, path, allow_early_resets=True)")
         self.rewards = []
         self.needs_reset = False
         for key in self.reset_keywords:
@@ -84,7 +91,8 @@ class Monitor(gym.Wrapper):
         Step the environment with the given action
 
         :param action: (np.ndarray) the action
-        :return: (Tuple[np.ndarray, float, bool, Dict[Any, Any]]) observation, reward, done, information
+        :return: (Tuple[np.ndarray, float, bool, Dict[Any, Any]])
+            observation, reward, done, information
         """
         if self.needs_reset:
             raise RuntimeError("Tried to step environment that needs reset")
@@ -94,7 +102,10 @@ class Monitor(gym.Wrapper):
             self.needs_reset = True
             ep_rew = sum(self.rewards)
             eplen = len(self.rewards)
-            ep_info = {"r": round(ep_rew, 6), "l": eplen, "t": round(time.time() - self.t_start, 6)}
+            ep_info = {
+                "r": round(ep_rew, 6),
+                "l": eplen,
+                "t": round(time.time() - self.t_start, 6)}
             for key in self.info_keywords:
                 ep_info[key] = info[key]
             self.episode_rewards.append(ep_rew)

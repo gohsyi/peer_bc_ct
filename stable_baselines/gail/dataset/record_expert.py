@@ -189,3 +189,28 @@ def generate_expert_traj(model, save_path=None, env=None, n_timesteps=0,
     env.close()
 
     return numpy_dict
+
+
+if __name__ == '__main__':
+    # Example for PPO2
+    import argparse
+    import numpy as np
+    from stable_baselines import PPO2, logger
+    from stable_baselines.common.cmd_util import make_atari_env
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('expert', type=str,
+                        help='Expert path (*.zip)')
+    parser.add_argument('--seed', type=int, default=0,
+                        help='Random seed for env.')
+    parser.add_argument('--logdir', type=str, default='logs/PongNoFrameskip-v4/test/',
+                        help='Logging directory')
+    parser.add_argument('--env', type=str, default='PongNoFrameskip-v4',
+                        help='Environment ID')
+    args = parser.parse_args()
+
+    logger.configure(args.logdir)
+
+    env = VecFrameStack(make_atari_env(args.env, 1, args.seed), 4)
+    model = PPO2.load(args.expert)
+    generate_expert_traj(model, save_path=os.path.join(args.logdir, 'expert'), env=env)
