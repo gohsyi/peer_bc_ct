@@ -67,21 +67,25 @@ def generate_expert_traj(model, save_path=None, env=None, n_timesteps=0,
     if record_images and save_path is None:
         warnings.warn(
             "Observations are images but no save path was specified, "
-            "so will save in numpy archive; this can lead to higher memory usage.")
+            "so will save in numpy archive; "
+            "this can lead to higher memory usage.")
         record_images = False
 
-    if not record_images and len(obs_space.shape) == 3 and obs_space.dtype == np.uint8:
+    if not record_images and len(obs_space.shape) == 3 and \
+            obs_space.dtype == np.uint8:
         warnings.warn(
             "The observations looks like images (shape = {}) "
-            "but the number of channel > 4, so it will be saved in the numpy archive "
+            "but the number of channel > 4, so it will be saved "
+            "in the numpy archive "
             "which can lead to high memory usage".format(obs_space.shape))
 
     image_ext = 'jpg'
     if record_images:
         # We save images as jpg or png, that have only 3/4 color channels
         if isinstance(env, VecFrameStack) and env.n_stack == 4:
-            # assert env.n_stack < 5, "The current data recorder does no support"\
-            #                          "VecFrameStack with n_stack > 4"
+            # assert env.n_stack < 5,
+            # "The current data recorder does no support
+            #  VecFrameStack with n_stack > 4"
             image_ext = 'png'
 
         folder_path = os.path.dirname(save_path)
@@ -114,7 +118,8 @@ def generate_expert_traj(model, save_path=None, env=None, n_timesteps=0,
 
     while ep_idx < n_episodes:
         if record_images:
-            image_path = os.path.join(image_folder, "{}.{}".format(idx, image_ext))
+            image_path = os.path.join(image_folder, "{}.{}".format(
+                idx, image_ext))
             obs_ = obs[0] if is_vec_env else obs
             # Convert from RGB to BGR
             # which is the format OpenCV expect
@@ -163,7 +168,8 @@ def generate_expert_traj(model, save_path=None, env=None, n_timesteps=0,
         observations = np.array(observations)
 
     if isinstance(env.action_space, spaces.Box):
-        actions = np.concatenate(actions).reshape((-1,) + env.action_space.shape)
+        actions = np.concatenate(actions).reshape(
+            (-1,) + env.action_space.shape)
     elif isinstance(env.action_space, spaces.Discrete):
         actions = np.array(actions).reshape((-1, 1))
 
@@ -203,7 +209,7 @@ if __name__ == '__main__':
                         help='Expert path (*.zip)')
     parser.add_argument('--seed', type=int, default=0,
                         help='Random seed for env.')
-    parser.add_argument('--logdir', type=str, default='logs/PongNoFrameskip-v4/test/',
+    parser.add_argument('--note', type=str, default='test',
                         help='Logging directory')
     parser.add_argument('--env', type=str, default='PongNoFrameskip-v4',
                         help='Environment ID')
@@ -213,4 +219,5 @@ if __name__ == '__main__':
 
     env = VecFrameStack(make_atari_env(args.env, 1, args.seed), 4)
     model = PPO2.load(args.expert)
-    generate_expert_traj(model, save_path=os.path.join(args.logdir, 'expert'), env=env)
+    generate_expert_traj(
+        model, save_path=os.path.join(args.logdir, 'expert'), env=env)

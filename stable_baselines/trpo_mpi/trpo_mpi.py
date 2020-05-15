@@ -116,8 +116,9 @@ class TRPO(ActorCriticRLModel):
 
         with SetVerbosity(self.verbose):
 
-            assert issubclass(self.policy, ActorCriticPolicy), "Error: the input policy for the TRPO model must be " \
-                                                               "an instance of common.policies.ActorCriticPolicy."
+            assert issubclass(self.policy, ActorCriticPolicy), \
+                "Error: the input policy for the TRPO model must be " \
+                "an instance of common.policies.ActorCriticPolicy."
 
             self.nworkers = MPI.COMM_WORLD.Get_size()
             self.rank = MPI.COMM_WORLD.Get_rank()
@@ -126,12 +127,13 @@ class TRPO(ActorCriticRLModel):
             self.graph = tf.Graph()
             with self.graph.as_default():
                 self.set_random_seed(self.seed)
-                self.sess = tf_util.make_session(num_cpu=self.n_cpu_tf_sess, graph=self.graph)
+                self.sess = tf_util.make_session(
+                    num_cpu=self.n_cpu_tf_sess, graph=self.graph)
 
                 if self.using_gail:
-                    self.reward_giver = TransitionClassifier(self.observation_space, self.action_space,
-                                                             self.hidden_size_adversary,
-                                                             entcoeff=self.adversary_entcoeff)
+                    self.reward_giver = TransitionClassifier(
+                        self.observation_space, self.action_space,
+                        self.hidden_size_adversary, entcoeff=self.adversary_entcoeff)
 
                 # Construct network for new policy
                 self.policy_pi = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs, 1,
@@ -195,13 +197,13 @@ class TRPO(ActorCriticRLModel):
                     tf.summary.scalar('approximate_kullback-leibler', meankl)
                     tf.summary.scalar('loss', optimgain + meankl + entbonus + surrgain + meanent)
 
-                    self.assign_old_eq_new = \
-                        tf_util.function([], [], updates=[tf.assign(oldv, newv) for (oldv, newv) in
-                                                          zipsame(tf_util.get_globals_vars("oldpi"),
-                                                                  tf_util.get_globals_vars("model"))])
+                    self.assign_old_eq_new = tf_util.function([], [], updates=[
+                            tf.assign(oldv, newv) for (oldv, newv) in zipsame(
+                                tf_util.get_globals_vars("oldpi"),
+                                tf_util.get_globals_vars("model"))])
                     self.compute_losses = tf_util.function([observation, old_policy.obs_ph, action, atarg], losses)
-                    self.compute_fvp = tf_util.function([flat_tangent, observation, old_policy.obs_ph, action, atarg],
-                                                        fvp)
+                    self.compute_fvp = tf_util.function(
+                        [flat_tangent, observation, old_policy.obs_ph, action, atarg], fvp)
                     self.compute_vflossandgrad = tf_util.function([observation, old_policy.obs_ph, ret],
                                                                   tf_util.flatgrad(vferr, vf_var_list))
 
@@ -270,21 +272,22 @@ class TRPO(ActorCriticRLModel):
                                      [self.summary, tf_util.flatgrad(optimgain, var_list)] + losses)
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TRPO",
-              reset_num_timesteps=True):
+              reset_num_timesteps=True, total_iters=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
 
-        with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
-                as writer:
+        with SetVerbosity(self.verbose), TensorboardWriter(
+                self.graph, self.tensorboard_log, tb_log_name, new_tb_log) as writer:
             self._setup_learn()
 
             with self.sess.as_default():
                 callback.on_training_start(locals(), globals())
 
-                seg_gen = traj_segment_generator(self.policy_pi, self.env, self.timesteps_per_batch,
-                                                 reward_giver=self.reward_giver,
-                                                 gail=self.using_gail, callback=callback)
+                seg_gen = traj_segment_generator(
+                    self.policy_pi, self.env, self.timesteps_per_batch,
+                    reward_giver=self.reward_giver,
+                    gail=self.using_gail, callback=callback)
 
                 episodes_so_far = 0
                 timesteps_so_far = 0
@@ -310,11 +313,15 @@ class TRPO(ActorCriticRLModel):
                 while True:
                     if timesteps_so_far >= total_timesteps:
                         break
+                    if total_iters and iters_so_far >= total_iters:
+                        break
 
                     logger.log("********** Iteration %i ************" % iters_so_far)
 
                     def fisher_vector_product(vec):
-                        return self.allmean(self.compute_fvp(vec, *fvpargs, sess=self.sess)) + self.cg_damping * vec
+                        return self.allmean(
+                            self.compute_fvp(vec, *fvpargs, sess=self.sess)) + \
+                               self.cg_damping * vec
 
                     # ------------------ Update G ------------------
                     logger.log("Optimizing Policy...")
@@ -330,25 +337,26 @@ class TRPO(ActorCriticRLModel):
                             seg = seg_gen.__next__()
 
                         # Stop training early (triggered by the callback)
-                        if not seg.get('continue_training', True):  # pytype: disable=attribute-error
+                        if not seg.get('continue_training', True):
+                            # pytype: disable=attribute-error
                             break
 
                         add_vtarg_and_adv(seg, self.gamma, self.lam)
-                        # ob, ac, atarg, ret, td1ret = map(np.concatenate, (obs, acs, atargs, rets, td1rets))
                         observation, action = seg["observations"], seg["actions"]
                         atarg, tdlamret = seg["adv"], seg["tdlamret"]
 
-
-                        vpredbefore = seg["vpred"]  # predicted value function before update
-                        atarg = (atarg - atarg.mean()) / (atarg.std() + 1e-8)  # standardized advantage function estimate
+                        # predicted value function before update
+                        vpredbefore = seg["vpred"]
+                        # standardized advantage function estimate
+                        atarg = (atarg - atarg.mean()) / (atarg.std() + 1e-8)
 
                         # true_rew is the reward without discount
                         if writer is not None:
-                            total_episode_reward_logger(self.episode_reward,
-                                                        seg["true_rewards"].reshape(
-                                                            (self.n_envs, -1)),
-                                                        seg["dones"].reshape((self.n_envs, -1)),
-                                                        writer, self.num_timesteps)
+                            total_episode_reward_logger(
+                                self.episode_reward,
+                                seg["true_rewards"].reshape((self.n_envs, -1)),
+                                seg["dones"].reshape((self.n_envs, -1)),
+                                writer, self.num_timesteps)
 
                         args = seg["observations"], seg["observations"], seg["actions"], atarg
                         # Subsampling: see p40-42 of John Schulman thesis
@@ -363,16 +371,14 @@ class TRPO(ActorCriticRLModel):
                             run_metadata = tf.RunMetadata() if self.full_tensorboard_log else None
                             # run loss backprop with summary, and save the metadata (memory, compute time, ...)
                             if writer is not None:
-                                summary, grad, *lossbefore = self.compute_lossandgrad(*args, tdlamret, sess=self.sess,
-                                                                                      options=run_options,
-                                                                                      run_metadata=run_metadata)
+                                summary, grad, *lossbefore = self.compute_lossandgrad(
+                                    *args, tdlamret, sess=self.sess, options=run_options, run_metadata=run_metadata)
                                 if self.full_tensorboard_log:
                                     writer.add_run_metadata(run_metadata, 'step%d' % steps)
                                 writer.add_summary(summary, steps)
                             else:
-                                _, grad, *lossbefore = self.compute_lossandgrad(*args, tdlamret, sess=self.sess,
-                                                                                options=run_options,
-                                                                                run_metadata=run_metadata)
+                                _, grad, *lossbefore = self.compute_lossandgrad(
+                                    *args, tdlamret, sess=self.sess, options=run_options, run_metadata=run_metadata)
 
                         lossbefore = self.allmean(np.array(lossbefore))
                         grad = self.allmean(grad)
@@ -380,8 +386,9 @@ class TRPO(ActorCriticRLModel):
                             logger.log("Got zero gradient. not updating")
                         else:
                             with self.timed("conjugate_gradient"):
-                                stepdir = conjugate_gradient(fisher_vector_product, grad, cg_iters=self.cg_iters,
-                                                             verbose=self.rank == 0 and self.verbose >= 1)
+                                stepdir = conjugate_gradient(
+                                    fisher_vector_product, grad, cg_iters=self.cg_iters,
+                                    verbose=self.rank == 0 and self.verbose >= 1)
                             assert np.isfinite(stepdir).all()
                             shs = .5 * stepdir.dot(fisher_vector_product(stepdir))
                             # abs(shs) to avoid taking square root of negative values
@@ -423,20 +430,18 @@ class TRPO(ActorCriticRLModel):
                         with self.timed("vf"):
                             for _ in range(self.vf_iters):
                                 # NOTE: for recurrent policies, use shuffle=False?
-                                for (mbob, mbret) in dataset.iterbatches((seg["observations"], seg["tdlamret"]),
-                                                                         include_final_partial_batch=False,
-                                                                         batch_size=128,
-                                                                         shuffle=True):
+                                for (mbob, mbret) in dataset.iterbatches(
+                                        (seg["observations"], seg["tdlamret"]),
+                                        include_final_partial_batch=False, batch_size=128, shuffle=True):
                                     grad = self.allmean(self.compute_vflossandgrad(mbob, mbob, mbret, sess=self.sess))
                                     self.vfadam.update(grad, self.vf_stepsize)
-
 
                     # Stop training early (triggered by the callback)
                     if not seg.get('continue_training', True):  # pytype: disable=attribute-error
                         break
 
-                    logger.record_tabular("explained_variance_tdlam_before",
-                                          explained_variance(vpredbefore, tdlamret))
+                    logger.record_tabular(
+                        "explained_variance_tdlam_before", explained_variance(vpredbefore, tdlamret))
 
                     if self.using_gail:
                         # ------------------ Update D ------------------
@@ -448,10 +453,9 @@ class TRPO(ActorCriticRLModel):
                         # NOTE: uses only the last g step for observation
                         d_losses = []  # list of tuples, each of which gives the loss for a minibatch
                         # NOTE: for recurrent policies, use shuffle=False?
-                        for ob_batch, ac_batch in dataset.iterbatches((observation, action),
-                                                                      include_final_partial_batch=False,
-                                                                      batch_size=batch_size,
-                                                                      shuffle=True):
+                        for ob_batch, ac_batch in dataset.iterbatches(
+                                (observation, action), include_final_partial_batch=False,
+                                batch_size=batch_size, shuffle=True):
                             ob_expert, ac_expert = self.expert_dataset.get_next_batch()
                             # update running mean/std for reward_giver
                             if self.reward_giver.normalize:
@@ -494,6 +498,7 @@ class TRPO(ActorCriticRLModel):
                     iters_so_far += 1
 
                     logger.record_tabular("EpisodesSoFar", episodes_so_far)
+                    # TODO use episodes to control training (rather than timesteps)
                     logger.record_tabular("TimestepsSoFar", self.num_timesteps)
                     logger.record_tabular("TimeElapsed", time.time() - t_start)
 

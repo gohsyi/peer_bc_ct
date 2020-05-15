@@ -27,7 +27,8 @@ class ExpertDataset(object):
     :param train_fraction: (float) the train validation split (0 to 1)
         for pre-training using behavior cloning (BC)
     :param batch_size: (int) the minibatch size for behavior cloning
-    :param traj_limitation: (int) the number of trajectory to use (if -1, load all)
+    :param traj_limitation: (int) the number of trajectory to use
+    (if -1, load all)
     :param randomize: (bool) if the dataset should be shuffled
     :param verbose: (int) Verbosity
     :param sequential_preprocessing: (bool) Do not use subprocess to preprocess

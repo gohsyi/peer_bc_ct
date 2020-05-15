@@ -4,6 +4,7 @@ from typing import Union, Optional, Any
 
 import gym
 import numpy as np
+import tensorflow as tf
 
 from stable_baselines.common.callbacks import BaseCallback
 from stable_baselines.common.vec_env import VecEnv
@@ -153,7 +154,8 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False, 
             clipped_action = np.clip(action, env.action_space.low, env.action_space.high)
 
         if gail:
-            reward = reward_giver.get_reward(observation, clipped_action[0])
+            reward = reward_giver.get_reward(
+                np.expand_dims(observation, 0), clipped_action[0])
             observation, true_reward, done, info = env.step(clipped_action[0])
         else:
             observation, reward, done, info = env.step(clipped_action[0])

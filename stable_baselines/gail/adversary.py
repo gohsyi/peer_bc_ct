@@ -65,11 +65,11 @@ class TransitionClassifier(object):
         self.obs_rms = None
 
         # Placeholders
-        self.generator_obs_ph = tf.placeholder(observation_space.dtype, (None,) + self.observation_shape,
+        self.generator_obs_ph = tf.placeholder(tf.float32, (None,) + self.observation_shape,
                                                name="observations_ph")
         self.generator_acs_ph = tf.placeholder(action_space.dtype, (None,) + self.actions_shape,
                                                name="actions_ph")
-        self.expert_obs_ph = tf.placeholder(observation_space.dtype, (None,) + self.observation_shape,
+        self.expert_obs_ph = tf.placeholder(tf.float32, (None,) + self.observation_shape,
                                             name="expert_observations_ph")
         self.expert_acs_ph = tf.placeholder(action_space.dtype, (None,) + self.actions_shape,
                                             name="expert_actions_ph")
@@ -128,6 +128,7 @@ class TransitionClassifier(object):
             else:
                 actions_ph = acs_ph
 
+            obs = tf.reshape(obs, (-1, np.prod(obs.shape[1:])))
             _input = tf.concat([obs, actions_ph], axis=1)  # concatenate the two input -> form a transition
             p_h1 = tf.contrib.layers.fully_connected(_input, self.hidden_size, activation_fn=tf.nn.tanh)
             p_h2 = tf.contrib.layers.fully_connected(p_h1, self.hidden_size, activation_fn=tf.nn.tanh)
