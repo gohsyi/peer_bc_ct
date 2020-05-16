@@ -33,10 +33,10 @@ def nature_cnn(scaled_images, **kwargs):
         view_type = kwargs['view']
         if view_type == 'even':
             mask = np.array(
-                [i % 2 for i in range(h*w*d)]).reshape((1, h, w, d))
+                [i % 2 for i in range(h*w)]).reshape((1, h, w, 1))
         elif view_type == 'odd':
             mask = np.array(
-                [1 - i % 2 for i in range(h*w*d)]).reshape((1, h, w, d))
+                [1 - i % 2 for i in range(h*w)]).reshape((1, h, w, 1))
         else:
             raise NotImplementedError
         scaled_images = scaled_images * tf.constant(mask, dtype=tf.float32)

@@ -34,10 +34,15 @@ class View():
                     actions_ph.dtype, actions_ph.shape, "peer_action_ph")
                 peer_onehot_actions = tf.one_hot(
                     self.peer_actions_ph, self.model.action_space.n)
-                peer_term = tf.nn.softmax_cross_entropy_with_logits_v2(
-                    logits=self.actions_logits_ph,
-                    labels=tf.stop_gradient(peer_onehot_actions))
-                peer_term = tf.reduce_mean(peer_term)
+                # Use clipped softmax instead of the default
+                # peer_term = tf.nn.softmax_cross_entropy_with_logits_v2(
+                #     logits=self.actions_logits_ph,
+                #     labels=tf.stop_gradient(peer_onehot_actions))
+                softmax_actions_logits_ph = tf.nn.softmax(
+                    self.actions_logits_ph, axis=1) + 1e-8
+                peer_term = tf.reduce_mean(-tf.reduce_sum(
+                    tf.stop_gradient(peer_onehot_actions) *
+                    tf.log(softmax_actions_logits_ph), axis=-1))
                 self.peer_term = self.peer * peer_term
                 self.loss -= self.peer_term
 
@@ -125,14 +130,12 @@ def main():
                         default='cnn', help='Policy architecture')
     parser.add_argument('--peer', type=float, default=0.,
                         help='Coefficient of the peer term. (default: 0)')
-    parser.add_argument('--log', type=str, default='logs',
-                        help='Log note')
     parser.add_argument('--note', type=str, default='test',
                         help='Log path')
     parser.add_argument('--individual', action='store_true', default=False,
                         help='If true, no co-training is applied.')
     args = parser.parse_args()
-    logger.configure(os.path.join(args.log, args.env, args.note))
+    logger.configure(os.path.join('logs', args.env, args.note))
     logger.info(args)
     train(
         args.env,
