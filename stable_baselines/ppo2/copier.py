@@ -21,6 +21,7 @@ class View():
 
         with self.model.graph.as_default():
             with tf.variable_scope('copier'):
+                self.peer_ph = tf.placeholder(tf.float32, (1,), "peer_ph")
                 self.obs_ph, self.actions_ph, self.actions_logits_ph = \
                     self.model._get_pretrain_placeholders()
                 actions_ph = tf.expand_dims(self.actions_ph, axis=1)
@@ -40,10 +41,9 @@ class View():
                 #     labels=tf.stop_gradient(peer_onehot_actions))
                 softmax_actions_logits_ph = tf.nn.softmax(
                     self.actions_logits_ph, axis=1) + 1e-8
-                peer_term = tf.reduce_mean(-tf.reduce_sum(
+                self.peer_term = self.peer_ph * tf.reduce_mean(-tf.reduce_sum(
                     tf.stop_gradient(peer_onehot_actions) *
                     tf.log(softmax_actions_logits_ph), axis=-1))
-                self.peer_term = self.peer * peer_term
                 self.loss -= self.peer_term
 
             self.optim_op = self.model.trainer.minimize(
@@ -56,7 +56,8 @@ class View():
             self.obs_ph: obses,
             self.actions_ph: actions[: None],
             self.peer_actions_ph: peer_actions[:, None],
-            self.model.learning_rate_ph: self.learning_rate
+            self.model.learning_rate_ph: self.learning_rate,
+            self.peer_ph: self.peer,
         }
         train_loss, peer_loss, _ = self.model.sess.run(
             [self.loss, self.peer_term, self.optim_op], feed_dict)
@@ -66,7 +67,7 @@ class View():
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128, peer=0., individual=False):
+          n_steps=128, peer=0., peer_decay=False, individual=False):
     """
     Train PPO2 model for atari environment, for testing purposes
 
@@ -114,6 +115,9 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
         if not individual:
             for view, other_view in zip(("A", "B"), ("B", "A")):
                 obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
+                if peer_decay:
+                    decay_rate = np.abs(n_updates//2 - t) // (n_updates//2)
+                    views[view].peer = peer * (1 - decay_rate)
                 views[view].learn(obses, actions)
 
     for view in "A", "B":
@@ -134,6 +138,7 @@ def main():
                         help='Log path')
     parser.add_argument('--individual', action='store_true', default=False,
                         help='If true, no co-training is applied.')
+    parser.add_argument('--peer-decay', action='store_true', default=False)
     args = parser.parse_args()
     logger.configure(os.path.join('logs', args.env, args.note))
     logger.info(args)
@@ -143,7 +148,8 @@ def main():
         seed=args.seed,
         policy=args.policy,
         peer=args.peer,
-        individual=args.individual
+        peer_decay=args.peer_decay,
+        individual=args.individual,
     )
 
 
