@@ -12,7 +12,19 @@ from stable_baselines.common.policies import (
     CnnPolicy, CnnLstmPolicy, CnnLnLstmPolicy, MlpPolicy)
 
 
-class View():
+class Scheduler:
+    def __init__(self, total_steps, start_step):
+        self._total_steps = total_steps - start_step
+        self._start_step = start_step
+
+    def __call__(self, step):
+        if step < self._start_step:
+            return 0
+        step -= self._start_step
+        return 1 - np.abs(self._total_steps / 2 - step) / (self._total_steps / 2)
+
+
+class View:
     def __init__(self, model, peer=0., learning_rate=2.5e-4, epsilon=1e-5):
         self.model = model
         self.peer = peer
@@ -21,7 +33,7 @@ class View():
 
         with self.model.graph.as_default():
             with tf.variable_scope('copier'):
-                self.peer_ph = tf.placeholder(tf.float32, (1,), "peer_ph")
+                self.peer_ph = tf.placeholder(tf.float32, (), "peer_ph")
                 self.obs_ph, self.actions_ph, self.actions_logits_ph = \
                     self.model._get_pretrain_placeholders()
                 actions_ph = tf.expand_dims(self.actions_ph, axis=1)
@@ -67,7 +79,7 @@ class View():
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128, peer=0., peer_decay=False, individual=False):
+          n_steps=128, peer=0., start_episode=0, individual=False):
     """
     Train PPO2 model for atari environment, for testing purposes
 
@@ -109,15 +121,15 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
 
     n_batch = n_envs * n_steps
     n_updates = num_timesteps // n_batch
+    scheduler = Scheduler(n_updates, start_episode)
+
     for t in range(n_updates):
         for view in "A", "B":
             models[view].learn(n_batch)
         if not individual:
             for view, other_view in zip(("A", "B"), ("B", "A")):
                 obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
-                if peer_decay:
-                    decay_rate = np.abs(n_updates//2 - t) // (n_updates//2)
-                    views[view].peer = peer * (1 - decay_rate)
+                views[view].peer = peer * scheduler(t)
                 views[view].learn(obses, actions)
 
     for view in "A", "B":
@@ -138,7 +150,8 @@ def main():
                         help='Log path')
     parser.add_argument('--individual', action='store_true', default=False,
                         help='If true, no co-training is applied.')
-    parser.add_argument('--peer-decay', action='store_true', default=False)
+    parser.add_argument('--start-episode', type=int, default=0,
+                        help='Add peer term after this episode.')
     args = parser.parse_args()
     logger.configure(os.path.join('logs', args.env, args.note))
     logger.info(args)
@@ -148,7 +161,7 @@ def main():
         seed=args.seed,
         policy=args.policy,
         peer=args.peer,
-        peer_decay=args.peer_decay,
+        start_episode=args.start_episode,
         individual=args.individual,
     )
 
