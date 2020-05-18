@@ -5,7 +5,6 @@ import tensorflow as tf
 
 from stable_baselines import PPO2, logger
 from stable_baselines.common.vec_env import VecFrameStack
-from stable_baselines.common.callbacks import BaseCallback
 from stable_baselines.common.cmd_util import (
     make_atari_env, atari_arg_parser)
 from stable_baselines.common.policies import (
@@ -61,14 +60,14 @@ class View:
             self.optim_op = self.model.trainer.minimize(
                 self.loss, var_list=self.model.params)
 
-    def learn(self, obses, actions):
+    def learn(self, obses, actions, learning_rate=None):
         peer_actions = copy.deepcopy(actions)
         np.random.shuffle(peer_actions)
         feed_dict = {
             self.obs_ph: obses,
             self.actions_ph: actions[: None],
             self.peer_actions_ph: peer_actions[:, None],
-            self.model.learning_rate_ph: self.learning_rate,
+            self.model.learning_rate_ph: learning_rate or self.learning_rate,
             self.peer_ph: self.peer,
         }
         train_loss, peer_loss, _ = self.model.sess.run(
@@ -79,7 +78,7 @@ class View:
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128, peer=0., start_episode=0, individual=False):
+          n_steps=128, peer=0., start_episode=0, individual=False, repeat=1):
     """
     Train PPO2 model for atari environment, for testing purposes
 
@@ -130,7 +129,10 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
             for view, other_view in zip(("A", "B"), ("B", "A")):
                 obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
                 views[view].peer = peer * scheduler(t)
-                views[view].learn(obses, actions)
+                if peer > 0:
+                    for _ in range(repeat):
+                        views[view].learn(
+                            obses, actions, views[view].learning_rate / repeat)
 
     for view in "A", "B":
         models[view].env.close()
@@ -152,6 +154,8 @@ def main():
                         help='If true, no co-training is applied.')
     parser.add_argument('--start-episode', type=int, default=0,
                         help='Add peer term after this episode.')
+    parser.add_argument('--repeat', type=int, default=1,
+                        help='Repeat training on the dataset in one epoch')
     args = parser.parse_args()
     logger.configure(os.path.join('logs', args.env, args.note))
     logger.info(args)
@@ -163,6 +167,7 @@ def main():
         peer=args.peer,
         start_episode=args.start_episode,
         individual=args.individual,
+        repeat=args.repeat,
     )
 
 
