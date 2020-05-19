@@ -198,7 +198,7 @@ def generate_expert_traj(model, save_path=None, env=None, n_timesteps=0,
 
 
 if __name__ == '__main__':
-    # Example for PPO2
+    # Example for PPO2 on Atari env
     import argparse
     import numpy as np
     from stable_baselines import PPO2, logger
@@ -215,9 +215,11 @@ if __name__ == '__main__':
                         help='Environment ID')
     args = parser.parse_args()
 
-    logger.configure(args.logdir)
+    logdir = os.path.join('logs', args.env, args.note)
+    logger.configure(logdir)
+    logger.info(args)
 
     env = VecFrameStack(make_atari_env(args.env, 1, args.seed), 4)
     model = PPO2.load(args.expert)
     generate_expert_traj(
-        model, save_path=os.path.join(args.logdir, 'expert'), env=env)
+        model, save_path=os.path.join(logdir, 'expert'), env=env)
