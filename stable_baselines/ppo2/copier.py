@@ -129,10 +129,9 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
             for view, other_view in zip(("A", "B"), ("B", "A")):
                 obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
                 views[view].peer = peer * scheduler(t)
-                if peer > 0:
-                    for _ in range(repeat):
-                        views[view].learn(
-                            obses, actions, views[view].learning_rate / repeat)
+                for _ in range(repeat):
+                    views[view].learn(
+                        obses, actions, views[view].learning_rate / repeat)
 
     for view in "A", "B":
         models[view].env.close()
