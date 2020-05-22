@@ -31,7 +31,7 @@ def run_gail():
 
     dataset = ExpertDataset(
         expert_path=args.expert, batch_size=128, train_fraction=0.99, verbose=1)
-    model = GAIL(args.policy, env, dataset, verbose=1)
+    model = GAIL(args.policy, env, dataset, timesteps_per_batch=1280, verbose=1)
     model.learn(len(dataset.train_loader) * 1280)
 
 
