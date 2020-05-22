@@ -115,10 +115,10 @@ class TRPO(ActorCriticRLModel):
         from stable_baselines.gail.adversary import TransitionClassifier
 
         with SetVerbosity(self.verbose):
-
-            assert issubclass(self.policy, ActorCriticPolicy), \
-                "Error: the input policy for the TRPO model must be " \
+            assert issubclass(self.policy, ActorCriticPolicy), (
+                "Error: the input policy for the TRPO model must be "
                 "an instance of common.policies.ActorCriticPolicy."
+            )
 
             self.nworkers = MPI.COMM_WORLD.Get_size()
             self.rank = MPI.COMM_WORLD.Get_rank()
@@ -136,17 +136,21 @@ class TRPO(ActorCriticRLModel):
                         self.hidden_size_adversary, entcoeff=self.adversary_entcoeff)
 
                 # Construct network for new policy
-                self.policy_pi = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs, 1,
-                                             None, reuse=False, **self.policy_kwargs)
+                self.policy_pi = self.policy(
+                    self.sess, self.observation_space, self.action_space, self.n_envs, 1,
+                    None, reuse=False, **self.policy_kwargs)
 
                 # Network for old policy
                 with tf.variable_scope("oldpi", reuse=False):
-                    old_policy = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs, 1,
-                                             None, reuse=False, **self.policy_kwargs)
+                    old_policy = self.policy(
+                        self.sess, self.observation_space, self.action_space, self.n_envs, 1,
+                        None, reuse=False, **self.policy_kwargs)
 
                 with tf.variable_scope("loss", reuse=False):
-                    atarg = tf.placeholder(dtype=tf.float32, shape=[None])  # Target advantage function (if applicable)
-                    ret = tf.placeholder(dtype=tf.float32, shape=[None])  # Empirical return
+                    # Target advantage function (if applicable)
+                    atarg = tf.placeholder(dtype=tf.float32, shape=[None])
+                    # Empirical return  
+                    ret = tf.placeholder(dtype=tf.float32, shape=[None])  
 
                     observation = self.policy_pi.obs_ph
                     action = self.policy_pi.pdtype.sample_placeholder([None])

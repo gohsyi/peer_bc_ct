@@ -65,14 +65,14 @@ class TransitionClassifier(object):
         self.obs_rms = None
 
         # Placeholders
-        self.generator_obs_ph = tf.placeholder(tf.float32, (None,) + self.observation_shape,
-                                               name="observations_ph")
-        self.generator_acs_ph = tf.placeholder(action_space.dtype, (None,) + self.actions_shape,
-                                               name="actions_ph")
-        self.expert_obs_ph = tf.placeholder(tf.float32, (None,) + self.observation_shape,
-                                            name="expert_observations_ph")
-        self.expert_acs_ph = tf.placeholder(action_space.dtype, (None,) + self.actions_shape,
-                                            name="expert_actions_ph")
+        self.generator_obs_ph = tf.placeholder(
+            tf.float32, (None,) + self.observation_shape, name="observations_ph")
+        self.generator_acs_ph = tf.placeholder(
+            action_space.dtype, (None,) + self.actions_shape, name="actions_ph")
+        self.expert_obs_ph = tf.placeholder(
+            tf.float32, (None,) + self.observation_shape, name="expert_observations_ph")
+        self.expert_acs_ph = tf.placeholder(
+            action_space.dtype, (None,) + self.actions_shape, name="expert_actions_ph")
         # Build graph
         generator_logits = self.build_graph(self.generator_obs_ph, self.generator_acs_ph, reuse=False)
         expert_logits = self.build_graph(self.expert_obs_ph, self.expert_acs_ph, reuse=True)
@@ -82,18 +82,21 @@ class TransitionClassifier(object):
         # Build regression loss
         # let x = logits, z = targets.
         # z * -log(sigmoid(x)) + (1 - z) * -log(1 - sigmoid(x))
-        generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=generator_logits,
-                                                                 labels=tf.zeros_like(generator_logits))
+        generator_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=generator_logits, labels=tf.zeros_like(generator_logits))
         generator_loss = tf.reduce_mean(generator_loss)
-        expert_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits=expert_logits, labels=tf.ones_like(expert_logits))
+        expert_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=expert_logits, labels=tf.ones_like(expert_logits))
         expert_loss = tf.reduce_mean(expert_loss)
         # Build entropy loss
         logits = tf.concat([generator_logits, expert_logits], 0)
         entropy = tf.reduce_mean(logit_bernoulli_entropy(logits))
         entropy_loss = -entcoeff * entropy
         # Loss + Accuracy terms
-        self.losses = [generator_loss, expert_loss, entropy, entropy_loss, generator_acc, expert_acc]
-        self.loss_name = ["generator_loss", "expert_loss", "entropy", "entropy_loss", "generator_acc", "expert_acc"]
+        self.losses = [
+            generator_loss, expert_loss, entropy, entropy_loss, generator_acc, expert_acc]
+        self.loss_name = [
+            "generator_loss", "expert_loss", "entropy", "entropy_loss", "generator_acc", "expert_acc"]
         self.total_loss = generator_loss + expert_loss + entropy_loss
         # Build Reward for policy
         self.reward_op = -tf.log(1 - tf.nn.sigmoid(generator_logits) + 1e-8)
@@ -128,11 +131,33 @@ class TransitionClassifier(object):
             else:
                 actions_ph = acs_ph
 
-            obs = tf.reshape(obs, (-1, np.prod(obs.shape[1:])))
-            _input = tf.concat([obs, actions_ph], axis=1)  # concatenate the two input -> form a transition
-            p_h1 = tf.contrib.layers.fully_connected(_input, self.hidden_size, activation_fn=tf.nn.tanh)
-            p_h2 = tf.contrib.layers.fully_connected(p_h1, self.hidden_size, activation_fn=tf.nn.tanh)
-            logits = tf.contrib.layers.fully_connected(p_h2, 1, activation_fn=tf.identity)
+            if len(obs.shape) > 2:
+                # image input
+                # from nature_cnn
+                from stable_baselines.common.tf_layers import conv, conv_to_fc
+                activ = tf.nn.relu
+
+                layer_1 = activ(conv(
+                    obs, 'c1', n_filters=32, filter_size=8, stride=4, 
+                    init_scale=np.sqrt(2)))
+                layer_2 = activ(conv(
+                    layer_1, 'c2', n_filters=64, filter_size=4, stride=2, 
+                    init_scale=np.sqrt(2)))
+                layer_3 = activ(conv(
+                    layer_2, 'c3', n_filters=64, filter_size=3, stride=1,
+                    init_scale=np.sqrt(2)))
+                obs = conv_to_fc(layer_3)
+                print(f'Using CNN for discriminator. obs_ph size: {obs.shape}')
+
+            # obs = tf.reshape(obs, (-1, np.prod(obs.shape[1:])))
+            # concatenate the two input -> form a transition
+            _input = tf.concat([obs, actions_ph], axis=1)  
+            p_h1 = tf.contrib.layers.fully_connected(
+                _input, self.hidden_size, activation_fn=tf.nn.tanh)
+            p_h2 = tf.contrib.layers.fully_connected(
+                p_h1, self.hidden_size, activation_fn=tf.nn.tanh)
+            logits = tf.contrib.layers.fully_connected(
+                p_h2, 1, activation_fn=tf.identity)
         return logits
 
     def get_trainable_variables(self):
