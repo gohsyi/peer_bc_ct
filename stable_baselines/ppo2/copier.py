@@ -12,12 +12,13 @@ from stable_baselines.common.policies import (
 
 
 class Scheduler:
-    def __init__(self, total_steps, start_step):
-        self._total_steps = total_steps - start_step
+    def __init__(self, start_step, end_step):
+        self._total_steps = end_steps - start_step
         self._start_step = start_step
+        self._end_step = end_step
 
     def __call__(self, step):
-        if step < self._start_step:
+        if step <= self._start_step or step >= self._end_step:
             return 0
         step -= self._start_step
         return 1 - np.abs(self._total_steps / 2 - step) / (self._total_steps / 2)
@@ -78,7 +79,8 @@ class View:
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128, peer=0., start_episode=0, individual=False, repeat=1):
+          n_steps=128, peer=0., start_episode=0, end_episode, 
+          individual=False, repeat=1):
     """
     Train PPO2 model for atari environment, for testing purposes
 
@@ -120,7 +122,7 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
 
     n_batch = n_envs * n_steps
     n_updates = num_timesteps // n_batch
-    scheduler = Scheduler(n_updates, start_episode)
+    scheduler = Scheduler(start_episode, end_episode)
 
     for t in range(n_updates):
         for view in "A", "B":
@@ -153,6 +155,8 @@ def main():
                         help='If true, no co-training is applied.')
     parser.add_argument('--start-episode', type=int, default=0,
                         help='Add peer term after this episode.')
+    parser.add_argument('--end-episode', type=int, default=0,
+                        help='Remove peer term after this episode.')
     parser.add_argument('--repeat', type=int, default=1,
                         help='Repeat training on the dataset in one epoch')
     args = parser.parse_args()
@@ -165,6 +169,7 @@ def main():
         policy=args.policy,
         peer=args.peer,
         start_episode=args.start_episode,
+        end_episode=args.end_episode,
         individual=args.individual,
         repeat=args.repeat,
     )
