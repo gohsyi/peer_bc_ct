@@ -134,7 +134,8 @@ class TransitionClassifier(object):
             if len(obs.shape) > 2:
                 # image input
                 # from nature_cnn
-                from stable_baselines.common.tf_layers import conv, conv_to_fc
+                from stable_baselines.common.tf_layers import (
+                    conv, linear, conv_to_fc)
                 activ = tf.nn.relu
 
                 layer_1 = activ(conv(
@@ -146,7 +147,9 @@ class TransitionClassifier(object):
                 layer_3 = activ(conv(
                     layer_2, 'c3', n_filters=64, filter_size=3, stride=1,
                     init_scale=np.sqrt(2)))
-                obs = conv_to_fc(layer_3)
+                layer_3 = conv_to_fc(layer_3)
+                obs = activ(linear(
+                    layer_3, 'fc1', n_hidden=128, init_scale=np.sqrt(2)))
                 print(f'Using CNN for discriminator. obs_ph size: {obs.shape}')
 
             # obs = tf.reshape(obs, (-1, np.prod(obs.shape[1:])))
