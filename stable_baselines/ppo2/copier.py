@@ -13,7 +13,7 @@ from stable_baselines.common.policies import (
 
 class Scheduler:
     def __init__(self, start_step, end_step):
-        self._total_steps = end_steps - start_step
+        self._total_steps = end_step - start_step
         self._start_step = start_step
         self._end_step = end_step
 
@@ -79,7 +79,7 @@ class View:
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128, peer=0., start_episode=0, end_episode, 
+          n_steps=128, peer=0., start_episode=0, end_episode=0, 
           individual=False, repeat=1):
     """
     Train PPO2 model for atari environment, for testing purposes
