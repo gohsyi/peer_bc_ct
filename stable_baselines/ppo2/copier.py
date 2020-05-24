@@ -12,16 +12,26 @@ from stable_baselines.common.policies import (
 
 
 class Scheduler:
-    def __init__(self, start_step, end_step):
+    def __init__(self, start_step, end_step, decay_type=None):
         self._total_steps = end_step - start_step
         self._start_step = start_step
         self._end_step = end_step
+        self._decay_type = decay_type
 
     def __call__(self, step):
         if step <= self._start_step or step >= self._end_step:
             return 0
         step -= self._start_step
-        return 1 - np.abs(self._total_steps / 2 - step) / (self._total_steps / 2)
+        if self._decay_type == 'incdec':
+            return 1 - np.abs(self._total_steps / 2 - step) / (self._total_steps / 2)
+        elif self._decay_type == 'inc':
+            return step / self._total_steps
+        elif self._decay_type == 'dec':
+            return 1 - step / self._total_steps
+        elif not self._decay_type:
+            return 1.
+        else:
+            raise NotImplementedError
 
 
 class View:
@@ -79,8 +89,7 @@ class View:
 
 
 def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
-          n_steps=128, peer=0., start_episode=0, end_episode=0, 
-          individual=False, repeat=1):
+          n_steps=128, peer=0., scheduler=None, individual=False, repeat=1):
     """
     Train PPO2 model for atari environment, for testing purposes
 
@@ -122,7 +131,6 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
 
     n_batch = n_envs * n_steps
     n_updates = num_timesteps // n_batch
-    scheduler = Scheduler(start_episode, end_episode)
 
     for t in range(n_updates):
         for view in "A", "B":
@@ -155,21 +163,24 @@ def main():
                         help='If true, no co-training is applied.')
     parser.add_argument('--start-episode', type=int, default=0,
                         help='Add peer term after this episode.')
-    parser.add_argument('--end-episode', type=int, default=0,
+    parser.add_argument('--end-episode', type=int, default=10000,
                         help='Remove peer term after this episode.')
+    parser.add_argument('--decay-type', type=str, default=None, 
+                        choices=[None, 'inc', 'dec', 'inc_dec'],
+                        help='Decay type for alpha')
     parser.add_argument('--repeat', type=int, default=1,
                         help='Repeat training on the dataset in one epoch')
     args = parser.parse_args()
     logger.configure(os.path.join('logs', args.env, args.note))
     logger.info(args)
+    scheduler = Scheduler(args.start_episode, args.end_episode, decay_type=args.decay_type)
     train(
         args.env,
         num_timesteps=args.num_timesteps,
         seed=args.seed,
         policy=args.policy,
         peer=args.peer,
-        start_episode=args.start_episode,
-        end_episode=args.end_episode,
+        scheduler=scheduler,
         individual=args.individual,
         repeat=args.repeat,
     )
