@@ -133,12 +133,14 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
     n_updates = num_timesteps // n_batch
 
     for t in range(n_updates):
+        logger.info("current episode:", t)
         for view in "A", "B":
             models[view].learn(n_batch)
         if not individual:
             for view, other_view in zip(("A", "B"), ("B", "A")):
                 obses, _, _, actions, _, _, _, _, _ = models[other_view].rollout
                 views[view].peer = peer * scheduler(t)
+                logger.info("current alpha:", views[view].peer)
                 for _ in range(repeat):
                     views[view].learn(
                         obses, actions, views[view].learning_rate / repeat)
