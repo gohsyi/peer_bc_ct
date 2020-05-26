@@ -202,8 +202,9 @@ class BasePolicy(ABC):
         # are not passed explicitly (using **kwargs to forward the arguments)
         # that's why there should be not kwargs left when using the mlp_extractor
         # (in that case the keywords arguments are passed explicitly)
-        if feature_extraction == 'mlp' and len(kwargs) > 0:
-            raise ValueError("Unknown keywords for policy: {}".format(kwargs))
+        pass
+        # if feature_extraction == 'mlp' and len(kwargs) > 0:
+        #     raise ValueError("Unknown keywords for policy: {}".format(kwargs))
 
     @abstractmethod
     def step(self, obs, state=None, mask=None):
@@ -597,8 +598,15 @@ class FeedForwardPolicy(ActorCriticPolicy):
                 pi_latent = vf_latent = cnn_extractor(
                     self.processed_obs, **kwargs)
             else:
-                pi_latent, vf_latent = mlp_extractor(
-                    tf.layers.flatten(self.processed_obs), net_arch, act_fun)
+                flatten_obs = tf.layers.flatten(self.processed_obs)
+                if 'view' in kwargs.keys():
+                    mask = np.ones((1, flatten_obs.shape[-1]))
+                    mask[0, 1 if kwargs['view'] == 'even' else 0] = 0
+                    print('view is', kwargs['view'])
+                    print('mask is', mask)
+                    flatten_obs = flatten_obs * tf.constant(mask, dtype=tf.float32)
+                    del kwargs['view']
+                pi_latent, vf_latent = mlp_extractor(flatten_obs, net_arch, act_fun)
 
             self._value_fn = linear(vf_latent, 'vf', 1)
 

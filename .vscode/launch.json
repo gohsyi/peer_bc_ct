@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Acrobot",
+            "type": "python",
+            "request": "launch",
+            "module": "stable_baselines.ppo2.copier",
+            "args": ["--env", "Acrobot-v1", "--policy", "mlp"],
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",

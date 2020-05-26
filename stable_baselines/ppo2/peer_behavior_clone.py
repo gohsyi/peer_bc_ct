@@ -2,6 +2,7 @@ import os
 import argparse
 from stable_baselines import PPO2, logger
 from stable_baselines.gail import ExpertDataset
+from stable_baselines.common import set_global_seeds
 from stable_baselines.common.cmd_util import make_atari_env
 from stable_baselines.common.vec_env import VecFrameStack
 
@@ -27,6 +28,8 @@ parser.add_argument('--val-interval', type=int, default=100)
 parser.add_argument('--val-episodes', type=int, default=1)
 parser.add_argument('--num-epochs', type=int, default=50)
 args = parser.parse_args()
+
+set_global_seeds(args.seed)
 
 logger.configure(os.path.join('logs', args.env, args.note))
 

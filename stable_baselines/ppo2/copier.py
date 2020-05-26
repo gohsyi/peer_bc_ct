@@ -4,9 +4,10 @@ import numpy as np
 import tensorflow as tf
 
 from stable_baselines import PPO2, logger
-from stable_baselines.common.vec_env import VecFrameStack
+from stable_baselines.common import set_global_seeds
+from stable_baselines.common.vec_env import VecFrameStack, DummyVecEnv
 from stable_baselines.common.cmd_util import (
-    make_atari_env, atari_arg_parser)
+    make_atari_env, make_vec_env, atari_arg_parser)
 from stable_baselines.common.policies import (
     CnnPolicy, CnnLstmPolicy, CnnLnLstmPolicy, MlpPolicy)
 
@@ -113,18 +114,21 @@ def train(env_id, num_timesteps, seed, policy, n_envs=8, nminibatches=4,
         'mlp': MlpPolicy
     }[policy]
 
+    is_atari = 'NoFrameskip' in env_id
+    make_env = lambda: VecFrameStack(make_atari_env(env_id, n_envs, seed), 4) if is_atari \
+        else make_vec_env(env_id, n_envs, seed)
+    print(make_env)
+
     models = {
         "A": PPO2(
             policy=policy, policy_kwargs={'view': 'even'}, n_steps=n_steps,
-            env=VecFrameStack(make_atari_env(env_id, n_envs, seed), 4),
-            nminibatches=nminibatches, lam=0.95, gamma=0.99, noptepochs=4,
-            ent_coef=.01, learning_rate=2.5e-4,
+            env=make_env(), nminibatches=nminibatches, lam=0.95, gamma=0.99, 
+            noptepochs=4, ent_coef=.01, learning_rate=2.5e-4,
             cliprange=lambda f: f * 0.1, verbose=1),
         "B": PPO2(
             policy=policy, policy_kwargs={'view': 'odd'}, n_steps=n_steps,
-            env=VecFrameStack(make_atari_env(env_id, n_envs, seed), 4),
-            nminibatches=nminibatches, lam=0.95, gamma=0.99, noptepochs=4,
-            ent_coef=.01, learning_rate=2.5e-4,
+            env=make_env(), nminibatches=nminibatches, lam=0.95, gamma=0.99, 
+            noptepochs=4, ent_coef=.01, learning_rate=2.5e-4,
             cliprange=lambda f: f * 0.1, verbose=1)}
 
     views = {view: View(models[view], peer=peer) for view in ("A", "B")}
@@ -173,6 +177,9 @@ def main():
     parser.add_argument('--repeat', type=int, default=1,
                         help='Repeat training on the dataset in one epoch')
     args = parser.parse_args()
+
+    set_global_seeds(args.seed)
+
     logger.configure(os.path.join('logs', args.env, args.note))
     logger.info(args)
     scheduler = Scheduler(args.start_episode, args.end_episode, decay_type=args.decay_type)
