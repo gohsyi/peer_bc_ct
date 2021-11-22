@@ -5,7 +5,7 @@ The implementation is based on [stable-baselines](https://github.com/Stable-Base
 ## Installation
 
 ```
-conda create -n peer-bc-ct python==3.6
+conda env create -n peer-bc-ct python==3.6
 conda activate peer-bc-ct
 pip install -e . 
 ```
@@ -15,7 +15,7 @@ pip install -e .
 To replicate the experiments, we first need to train an imperfect expert policy.
 
 ```
-python -m stable_baselines.ppo2 
+python3 train.py --algo ppo2 --env BreakoutNoFrameskip-v4 --save-freq 1000000
 ```
 
 We need to generate expert dataset first using `stable_baselines/ppo2/record_expert.py`
